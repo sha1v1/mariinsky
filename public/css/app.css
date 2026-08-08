@@ -1,0 +1,1068 @@
+/* ==========================================================================
+   mariisnky — i-spy memory garden
+
+   Two worlds, on purpose.
+
+   THE GARDEN is a page out of an i-spy book: bright paper, objects scattered
+   edge to edge, everything findable and nothing labelled. It is public, it is
+   flat, it is a lot at once.
+
+   INSIDE A MEMORY is the opposite: one dark sphere, one thing at a time, and
+   it is coming apart. Going from one to the other should feel like putting
+   your eye to a hole in the page.
+   ========================================================================== */
+
+:root {
+  /* the paper */
+  --paper:      #fdfcf8;
+  --paper-deep: #f4f1e8;
+  --ink:        #17161c;
+  --dim:        #6f6b78;
+  --faint:      #a5a0ad;
+  --hairline:   #e6e1d5;
+
+  /* the void, for the inside of a memory */
+  --void:       #08070d;
+  --void-ink:   #ece9f4;
+  --void-dim:   #8e8aa6;
+  --void-faint: #55516b;
+  --void-edge:  rgba(150, 145, 190, 0.16);
+
+  /* the two i-dots of the wordmark, and the only fixed accents in the app.
+     everything else that is coloured is coloured by a memory. */
+  --dot-a: #3d6fc4;
+  --dot-b: #d8362a;
+
+  --glow: #8fa9ff;
+
+  --display: "Newsreader", "Iowan Old Style", Palatino, Georgia, serif;
+  --marker:  "Patrick Hand", "Bradley Hand", "Segoe Print", cursive;
+  --sans:    ui-sans-serif, -apple-system, "Segoe UI", Inter, system-ui, sans-serif;
+
+  --lift: 0 1px 1px rgba(30, 24, 10, 0.09), 0 6px 14px -6px rgba(30, 24, 10, 0.28);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: 0; }
+a { color: inherit; text-decoration: none; }
+
+:focus-visible {
+  outline: 2px solid var(--dot-a);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* the grain of the page itself — barely there, but it stops the white from
+   reading as a blank browser window */
+.paper {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(1100px 800px at 15% 0%, #ffffff, transparent 70%),
+    radial-gradient(900px 700px at 88% 100%, var(--paper-deep), transparent 66%),
+    var(--paper);
+}
+.paper::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.5;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.055'/%3E%3C/svg%3E");
+}
+body.in-memory .paper { opacity: 0; }
+body.in-memory { background: var(--void); color: var(--void-ink); }
+
+.loading { padding: 24vh 2rem; text-align: center; color: var(--faint); letter-spacing: 0.06em; }
+
+/* ---------------------------------------------------------------- shell --- */
+
+.masthead {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 40;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.5rem 1.9rem;
+  pointer-events: none;
+}
+.masthead > * { pointer-events: auto; }
+
+.wordmark { line-height: 1; }
+.wordmark h1 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(1.7rem, 3.4vw, 2.5rem);
+  letter-spacing: -0.012em;
+}
+.wordmark .dot-a { color: var(--dot-a); }
+.wordmark .dot-b { color: var(--dot-b); }
+.wordmark p {
+  font-family: var(--marker);
+  font-size: clamp(0.9rem, 1.5vw, 1.12rem);
+  letter-spacing: 0.06em;
+  color: var(--dim);
+  margin-top: 0.18rem;
+}
+
+.top-actions { display: flex; align-items: center; gap: 0.55rem; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.52rem 1.05rem;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(8px);
+  color: var(--dim);
+  font-size: 0.87rem;
+  transition: color 0.18s, border-color 0.18s, transform 0.18s, box-shadow 0.18s;
+}
+.btn:hover { color: var(--ink); border-color: #d3ccbb; transform: translateY(-1px); box-shadow: var(--lift); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+.btn-solid {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+  font-family: var(--marker);
+  font-size: 1.02rem;
+  letter-spacing: 0.03em;
+  padding: 0.55rem 1.3rem;
+}
+.btn-solid:hover { color: #fff; background: #000; border-color: #000; }
+
+.sound-pip {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.35;
+  transition: opacity 0.2s, transform 0.2s;
+}
+.sound-on .sound-pip { opacity: 1; color: var(--dot-a); animation: pip 2.4s ease-in-out infinite; }
+@keyframes pip { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.5); } }
+
+/* ----------------------------------------------------------- the garden --- */
+
+.garden { position: relative; min-height: 100dvh; }
+
+/* the scatter. marbles are absolutely positioned in here by garden.js, at
+   percentages, so the spread reflows without ever regridding. the insets keep
+   the drift clear of the masthead and the readout rather than sliding under
+   them. */
+.wall {
+  position: absolute;
+  top: 122px;
+  left: 36px;
+  right: 36px;
+  bottom: 136px;
+  z-index: 1;
+}
+
+.marble {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+  --decay: 0;
+  --marble: #888;
+  --vane: 0deg;
+  --vane-w: 38%;
+  --twist: 0deg;
+  --hx: 32%;
+  --hy: 28%;
+  animation: settle 0.9s var(--in-delay, 0ms) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes settle {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* the glass body.
+
+   a cat's-eye is mostly clear: you are looking through glass at a ribbon
+   suspended in the middle of it, and the colour you see at the edge is the
+   glass itself picking up the vane. the first pass at this painted a wide
+   opaque stripe across a white ball, which reads as a beach ball. what makes
+   it glass is the dark ring at the rim, the caustic where light focuses
+   through it, and letting the paper show through the middle. */
+.marble-body {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 50% 50%,
+      rgba(255, 255, 255, 0) 38%,
+      color-mix(in srgb, var(--marble) 12%, transparent) 74%,
+      color-mix(in srgb, var(--marble) 26%, transparent) 100%),
+    radial-gradient(circle at 50% 50%, #ffffff 0%, #fdfcf9 58%, #efece3 87%, #d8d2c4 100%);
+  filter: saturate(calc(1 - var(--decay) * 0.5)) contrast(calc(1 - var(--decay) * 0.14));
+  transform: rotate(var(--twist));
+  transition: filter 0.5s;
+  animation: bob var(--bob-dur, 8s) var(--bob-delay, 0s) ease-in-out infinite;
+}
+
+@keyframes bob {
+  0%, 100% { translate: 0 0; }
+  50%      { translate: 0 -5px; }
+}
+
+/* the vane: a twisted ribbon of colour suspended in the middle, tapering to
+   nothing well before it reaches the glass */
+.marble-body::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 86%;
+  height: var(--vane-w);
+  transform: translate(-50%, -50%) rotate(var(--vane));
+  border-radius: 50%;
+  background:
+    linear-gradient(90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--marble) 30%, transparent) 8%,
+      color-mix(in srgb, var(--marble) 68%, white) 24%,
+      var(--marble) 42%,
+      color-mix(in srgb, var(--marble) 92%, black) 51%,
+      var(--marble) 58%,
+      color-mix(in srgb, var(--marble) 68%, white) 76%,
+      color-mix(in srgb, var(--marble) 30%, transparent) 92%,
+      transparent 100%);
+  opacity: calc(1 - var(--decay) * 0.42);
+  filter: blur(calc(0.5px + var(--decay) * 2.4px));
+}
+
+/* the fold — every real cat's-eye has a second, thinner leaf behind the first */
+.marble-body::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 72%;
+  height: calc(var(--vane-w) * 0.4);
+  transform: translate(-50%, -50%) rotate(calc(var(--vane) + 58deg));
+  border-radius: 50%;
+  background: linear-gradient(90deg,
+    transparent, color-mix(in srgb, var(--marble) 58%, white) 45%, transparent);
+  opacity: calc(0.55 - var(--decay) * 0.35);
+  filter: blur(calc(0.8px + var(--decay) * 2px));
+}
+
+/* what makes it read as glass rather than a ball: the rim goes dark where the
+   sphere turns away, and a caustic burns bright where light focuses through */
+.marble-glass {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 2;
+  background:
+    radial-gradient(circle at 71% 73%, color-mix(in srgb, var(--marble) 45%, white), transparent 19%),
+    radial-gradient(circle at 50% 50%, transparent 56%, rgba(72, 58, 34, 0.09) 84%, rgba(48, 38, 22, 0.24) 100%);
+}
+
+/* the clouding: glass that has been handled goes dusty rather than grey — a
+   memory at 90% faded should still look like a marble, not a pebble */
+.marble-haze {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 3;
+  opacity: calc(var(--decay) * 0.8);
+  background:
+    radial-gradient(circle at 40% 36%, rgba(255, 255, 255, 0.72), rgba(250, 248, 242, 0.42) 52%, rgba(226, 220, 206, 0.5) 100%);
+}
+
+/* the specular pin-dot, and the contact shadow on the paper */
+.marble-shine {
+  position: absolute;
+  left: var(--hx);
+  top: var(--hy);
+  width: 15%;
+  height: 10%;
+  border-radius: 50%;
+  background: #fff;
+  filter: blur(0.5px);
+  opacity: calc(0.95 - var(--decay) * 0.45);
+  z-index: 4;
+  pointer-events: none;
+  transform: translate(-50%, -50%) rotate(-26deg);
+}
+.marble-cast {
+  position: absolute;
+  left: 50%;
+  bottom: -6%;
+  width: 74%;
+  height: 14%;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(60, 46, 20, calc(0.34 - var(--decay) * 0.18)), transparent 70%);
+  filter: blur(3px);
+  z-index: -1;
+  transition: opacity 0.3s;
+}
+
+.marble:hover, .marble:focus-visible { z-index: 20; }
+.marble:hover .marble-body,
+.marble:focus-visible .marble-body {
+  animation-play-state: paused;
+  filter: saturate(calc(1.06 - var(--decay) * 0.3)) contrast(1.02) brightness(1.02);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--marble) 16%, transparent),
+    0 12px 28px -10px color-mix(in srgb, var(--marble) 60%, transparent);
+  transform: rotate(var(--twist)) scale(1.1);
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.28s, filter 0.28s;
+}
+
+/* the marble that is currently sounding gets a ring that beats with it */
+.marble.sounding .marble-body {
+  box-shadow: 0 0 0 calc(3px + var(--level, 0) * 10px) color-mix(in srgb, var(--marble) 24%, transparent);
+}
+
+/* the label only shows on hover — an i-spy page does not name its objects */
+.marble-tag {
+  position: absolute;
+  top: 104%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 190px;
+  padding: 0.3rem 0.6rem;
+  border-radius: 8px;
+  background: rgba(23, 22, 28, 0.92);
+  color: #fff;
+  font-family: var(--marker);
+  font-size: 0.86rem;
+  line-height: 1.25;
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s;
+  z-index: 30;
+}
+.marble-tag em {
+  display: block;
+  font-family: var(--sans);
+  font-style: normal;
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 0.15rem;
+}
+.marble:hover .marble-tag, .marble:focus-visible .marble-tag { opacity: 1; }
+
+/* ------------------------------------------------------ garden furniture --- */
+
+.garden-hint {
+  position: fixed;
+  left: 50%;
+  bottom: 2.1rem;
+  transform: translateX(-50%);
+  z-index: 30;
+  font-family: var(--marker);
+  font-size: 1.02rem;
+  color: var(--dim);
+  text-align: center;
+  pointer-events: none;
+  transition: opacity 0.5s;
+}
+.garden-hint b { color: var(--ink); font-weight: 400; border-bottom: 2px solid var(--dot-b); }
+.garden-hint.gone { opacity: 0; }
+
+.empty-garden {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  gap: 1rem;
+  color: var(--dim);
+}
+.empty-garden h2 { font-family: var(--display); font-weight: 400; font-size: 1.6rem; color: var(--ink); }
+.empty-garden p { font-family: var(--marker); font-size: 1.05rem; }
+
+/* the live data panel — real counts, polled */
+.readout {
+  position: fixed;
+  left: 1.9rem;
+  bottom: 1.6rem;
+  z-index: 35;
+  width: min(310px, calc(100vw - 3.8rem));
+  padding: 0.85rem 1rem 0.95rem;
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--lift);
+  font-size: 0.8rem;
+}
+.readout h3 {
+  font-family: var(--marker);
+  font-weight: 400;
+  font-size: 0.98rem;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.readout .tick {
+  font-family: var(--sans);
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.readout-figures {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.4rem;
+  margin: 0.6rem 0 0.7rem;
+}
+.figure b {
+  display: block;
+  font-family: var(--display);
+  font-size: 1.35rem;
+  font-weight: 400;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.figure span {
+  display: block;
+  font-size: 0.63rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-top: 0.22rem;
+}
+.moodbar {
+  display: flex;
+  height: 7px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--paper-deep);
+}
+.moodbar i { display: block; height: 100%; transition: width 0.6s ease; }
+.moodkeys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.7rem;
+  margin-top: 0.45rem;
+  font-size: 0.68rem;
+  color: var(--dim);
+}
+.moodkeys span { display: inline-flex; align-items: center; gap: 0.28rem; }
+.moodkeys i { width: 7px; height: 7px; border-radius: 50%; }
+.readout-now {
+  margin-top: 0.6rem;
+  padding-top: 0.55rem;
+  border-top: 1px dashed var(--hairline);
+  color: var(--dim);
+  font-size: 0.73rem;
+  min-height: 1.1em;
+}
+.readout-now b { color: var(--ink); font-weight: 500; }
+
+/* ------------------------------------------------------------- mariinsky --- */
+
+.dog {
+  position: fixed;
+  right: 2rem;
+  bottom: 1rem;
+  z-index: 45;
+  width: 152px;
+  transform: translateX(165%);
+  transition: transform 1.15s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.dog.here { transform: translateX(0); }
+.dog svg { display: block; width: 100%; height: auto; overflow: visible; }
+.dog svg:hover { cursor: pointer; }
+
+/* she bounces on the way in — that is the trot — and then settles and breathes */
+.dog-body { animation: trot 0.4s ease-in-out infinite; transform-origin: 50% 96%; }
+.dog.settled .dog-body { animation: breathe 3.8s ease-in-out infinite; }
+@keyframes trot {
+  0%, 100% { transform: translateY(0) rotate(-1.4deg); }
+  50%      { transform: translateY(-7px) rotate(1.4deg); }
+}
+@keyframes breathe {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%      { transform: translateY(-2px) scale(1.014); }
+}
+
+.dog-tail { animation: wag 0.5s ease-in-out infinite; transform-origin: 72% 78%; }
+@keyframes wag {
+  0%, 100% { transform: rotate(-9deg); }
+  50%      { transform: rotate(11deg); }
+}
+.dog-ear-l { animation: flop 0.4s ease-in-out infinite; transform-origin: 42% 22%; }
+.dog-ear-r { animation: flop 0.4s ease-in-out infinite reverse; transform-origin: 58% 22%; }
+.dog.settled .dog-ear-l, .dog.settled .dog-ear-r { animation-duration: 3.8s; }
+@keyframes flop {
+  0%, 100% { transform: rotate(-3.5deg); }
+  50%      { transform: rotate(3.5deg); }
+}
+
+.bubble {
+  position: absolute;
+  right: 78%;
+  bottom: 62%;
+  width: 232px;
+  padding: 0.85rem 1rem 0.9rem;
+  border: 1.5px solid var(--ink);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 4px 5px 0 rgba(23, 22, 28, 0.1);
+  opacity: 0;
+  transform: translateY(8px) scale(0.94);
+  transform-origin: bottom right;
+  transition: opacity 0.3s, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+.dog.asking .bubble { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
+.bubble::after {
+  content: '';
+  position: absolute;
+  right: 16px;
+  bottom: -11px;
+  width: 18px; height: 18px;
+  background: #fff;
+  border-right: 1.5px solid var(--ink);
+  border-bottom: 1.5px solid var(--ink);
+  transform: rotate(38deg) skew(-6deg);
+  border-bottom-right-radius: 4px;
+}
+.bubble p {
+  font-family: var(--marker);
+  font-size: 1.06rem;
+  line-height: 1.32;
+  color: var(--ink);
+}
+.bubble .who {
+  font-family: var(--sans);
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 0.3rem;
+}
+.bubble-actions { display: flex; gap: 0.45rem; margin-top: 0.7rem; }
+.bubble-actions button {
+  flex: 1;
+  padding: 0.42rem 0.5rem;
+  border-radius: 9px;
+  border: 1.5px solid var(--ink);
+  font-family: var(--marker);
+  font-size: 0.95rem;
+  transition: background 0.16s, color 0.16s;
+}
+.bubble-actions .yes { background: var(--ink); color: #fff; }
+.bubble-actions .yes:hover { background: #000; }
+.bubble-actions .no { color: var(--dim); border-color: var(--hairline); }
+.bubble-actions .no:hover { color: var(--ink); border-color: var(--ink); }
+
+/* --------------------------------------------------------- contributing --- */
+
+.add {
+  position: relative;
+  z-index: 2;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 8.5rem 1.6rem 7rem;
+}
+.add-head { margin-bottom: 2rem; }
+.add-head h2 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  letter-spacing: -0.015em;
+  line-height: 1.12;
+}
+.add-head p {
+  font-family: var(--marker);
+  font-size: 1.1rem;
+  color: var(--dim);
+  margin-top: 0.55rem;
+}
+
+/* the four ways in. one tap, then you are already contributing. */
+.ways { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.55rem; margin-bottom: 1.5rem; }
+.way {
+  padding: 0.95rem 0.5rem 0.8rem;
+  border: 1.5px solid var(--hairline);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.7);
+  text-align: center;
+  transition: border-color 0.18s, transform 0.18s, box-shadow 0.18s, background 0.18s;
+}
+.way:hover { transform: translateY(-2px); box-shadow: var(--lift); border-color: #d3ccbb; }
+.way.on { border-color: var(--ink); background: #fff; box-shadow: var(--lift); }
+.way svg { display: block; margin: 0 auto 0.4rem; }
+.way b { display: block; font-family: var(--marker); font-weight: 400; font-size: 1rem; }
+.way span { display: block; font-size: 0.66rem; color: var(--faint); margin-top: 0.1rem; }
+
+.panel {
+  border: 1.5px solid var(--hairline);
+  border-radius: 16px;
+  background: #fff;
+  padding: 1.2rem;
+  margin-bottom: 1.1rem;
+}
+.panel > label {
+  display: block;
+  font-size: 0.68rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 0.55rem;
+}
+
+textarea, input[type=text] {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font-family: var(--display);
+  font-size: 1.15rem;
+  line-height: 1.5;
+  resize: none;
+}
+textarea::placeholder, input::placeholder { color: var(--faint); }
+
+.drop {
+  border: 1.5px dashed var(--hairline);
+  border-radius: 14px;
+  padding: 2.2rem 1rem;
+  text-align: center;
+  color: var(--dim);
+  font-family: var(--marker);
+  font-size: 1.02rem;
+  transition: border-color 0.18s, background 0.18s;
+}
+.drop.over { border-color: var(--dot-a); background: color-mix(in srgb, var(--dot-a) 6%, transparent); }
+.drop button { color: var(--ink); border-bottom: 2px solid var(--dot-b); }
+
+.staged { list-style: none; margin-top: 0.8rem; display: flex; flex-direction: column; gap: 0.35rem; }
+.staged li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 9px;
+  background: var(--paper-deep);
+  font-size: 0.86rem;
+  color: var(--dim);
+}
+.staged b { font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink); }
+.staged .drop-one { margin-left: auto; color: var(--faint); font-size: 1.1rem; line-height: 1; padding: 0 0.2rem; }
+.staged .drop-one:hover { color: var(--dot-b); }
+
+/* recording */
+.rec { display: flex; align-items: center; gap: 1rem; }
+.rec-btn {
+  width: 62px; height: 62px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  transition: transform 0.18s, background 0.18s;
+}
+.rec-btn i { width: 20px; height: 20px; border-radius: 50%; background: var(--dot-b); display: block; transition: all 0.2s; }
+.rec-btn:hover { transform: scale(1.05); }
+.rec-btn.on i { width: 17px; height: 17px; border-radius: 3px; }
+.rec-btn.on { animation: recpulse 1.4s ease-in-out infinite; }
+@keyframes recpulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--dot-b) 45%, transparent); }
+  50%      { box-shadow: 0 0 0 12px transparent; }
+}
+.rec-meta { font-family: var(--marker); font-size: 1.05rem; color: var(--dim); }
+.rec-meta b { display: block; font-family: var(--display); font-size: 1.5rem; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* the live read of what the transformation is about to do */
+.reading {
+  border: 1.5px solid var(--hairline);
+  border-left: 4px solid var(--reading, var(--faint));
+  border-radius: 12px;
+  padding: 0.8rem 1rem;
+  background: rgba(255, 255, 255, 0.7);
+  font-size: 0.85rem;
+  color: var(--dim);
+  line-height: 1.5;
+  margin-bottom: 1.2rem;
+  transition: border-color 0.4s;
+}
+.reading b { color: var(--ink); font-weight: 500; }
+.reading .lede {
+  display: block;
+  font-size: 0.66rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 0.3rem;
+}
+
+.add-actions { display: flex; align-items: center; gap: 1rem; }
+.status { font-size: 0.85rem; color: var(--dim); font-family: var(--marker); }
+
+/* ------------------------------------------------------ inside a memory --- */
+
+.orbscene {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100dvh;
+  gap: 0.4rem;
+  color: var(--void-ink);
+}
+.orbscene::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(900px 700px at 22% 12%, color-mix(in srgb, var(--glow) 14%, transparent), transparent 65%),
+    radial-gradient(800px 600px at 82% 82%, rgba(30, 90, 130, 0.16), transparent 62%),
+    var(--void);
+  animation: fadein 0.7s ease both;
+}
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+
+.hud {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.2rem;
+  padding: 1.1rem 1.4rem 0.2rem;
+  min-width: 0;
+}
+.hud-title { flex: 1; min-width: 0; }
+.hud-title h1 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 1.22rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hud-sub {
+  color: var(--void-faint);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  margin-top: 0.15rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.flashword { color: color-mix(in srgb, var(--glow) 60%, white); }
+.hud-actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+
+.hud .btn {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--void-edge);
+  color: var(--void-dim);
+  backdrop-filter: none;
+}
+.hud .btn:hover { color: var(--void-ink); border-color: rgba(160, 155, 200, 0.42); box-shadow: none; }
+.hud .btn-key {
+  background: color-mix(in srgb, var(--glow) 18%, transparent);
+  border-color: color-mix(in srgb, var(--glow) 50%, transparent);
+  color: color-mix(in srgb, var(--glow) 55%, white);
+}
+
+.stagewrap { position: relative; display: grid; place-items: center; min-height: 0; padding: 0.4rem; }
+
+.sphere {
+  --mx: 0; --my: 0; --decay: 0; --pulse: 1;
+  position: relative;
+  height: 100%;
+  max-width: min(96vw, 100%);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  overflow: hidden;
+  isolation: isolate;
+  /* the inner glow is a gradient, not an inset box-shadow. chrome renders
+     large-blur inset shadows on a circle with visible squarish banding --
+     four faint rectangles across the sphere, which read as a rendering bug
+     rather than atmosphere. gradients have no such artefact. */
+  background:
+    radial-gradient(circle at 36% 26%, color-mix(in srgb, var(--glow) 16%, transparent), transparent 58%),
+    radial-gradient(circle at 62% 78%, color-mix(in srgb, var(--glow) 10%, transparent), transparent 55%),
+    radial-gradient(circle at 50% 50%, transparent 52%, color-mix(in srgb, var(--glow) 14%, transparent) 88%, color-mix(in srgb, var(--glow) 22%, transparent) 100%),
+    #06060d;
+  box-shadow: 0 0 calc(90px * var(--pulse)) -12px color-mix(in srgb, var(--glow) calc(58% - var(--decay) * 40%), transparent);
+  transition: box-shadow 0.5s;
+}
+
+.collage {
+  position: absolute;
+  inset: 0;
+  filter: saturate(calc(1 - var(--decay) * 0.55)) brightness(calc(1 - var(--decay) * 0.2));
+  transition: filter 0.8s;
+}
+
+.plate {
+  position: absolute;
+  --o: 1; --z: 0.5; --r: 0deg;
+  opacity: var(--o);
+  transform:
+    translate(calc(-50% + var(--mx) * var(--z) * 70px), calc(-50% + var(--my) * var(--z) * 70px))
+    rotate(var(--r));
+  animation: appear 1.2s var(--in-delay, 0ms) cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  will-change: transform, opacity;
+}
+@keyframes appear {
+  from { opacity: 0; filter: blur(18px); }
+  to   { opacity: var(--o); filter: blur(0); }
+}
+
+.plate-inner {
+  position: relative;
+  width: 100%;
+  animation: drift var(--drift, 20s) var(--drift-delay, 0s) ease-in-out infinite;
+}
+@keyframes drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(0.8%, -1.8%, 0) scale(1.015); }
+}
+
+.plate-image .layer, .plate-image .layer canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.plate-image .layer { opacity: 0; transition: opacity 1.4s ease; }
+.plate-image .layer.ready { opacity: var(--layer-o, 1); }
+.plate-image .layer canvas { object-fit: contain; }
+
+.plate-video video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 3px;
+}
+
+.stamp {
+  position: absolute;
+  bottom: -1.35rem;
+  left: 0;
+  font-size: 0.6rem;
+  letter-spacing: 0.16em;
+  color: var(--void-faint);
+  text-transform: uppercase;
+}
+
+.plate-text { text-align: left; }
+.frag {
+  font-family: var(--display);
+  font-size: 1.02rem;
+  line-height: 1.45;
+  color: #f2f0fb;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.85), 0 0 40px rgba(0, 0, 0, 0.6);
+  margin-bottom: 0.55em;
+  text-wrap: pretty;
+}
+.frag.em { font-style: italic; color: color-mix(in srgb, var(--glow) 40%, #fff); }
+
+.flashed {
+  filter: drop-shadow(0 0 14px color-mix(in srgb, var(--glow) 70%, transparent)) !important;
+  animation: vivid 2.6s ease-out;
+}
+@keyframes vivid {
+  0%   { filter: brightness(2.4) drop-shadow(0 0 40px #fff); }
+  100% { filter: drop-shadow(0 0 14px color-mix(in srgb, var(--glow) 70%, transparent)); }
+}
+
+.sphere.flashing::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--glow) 55%, white), transparent 62%);
+  animation: bloom 2.4s ease-out forwards;
+  pointer-events: none;
+  z-index: 5;
+}
+@keyframes bloom { 0% { opacity: 0.55; } 100% { opacity: 0; } }
+
+.grain {
+  position: absolute;
+  inset: -20%;
+  pointer-events: none;
+  opacity: calc(var(--decay) * 0.6);
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+  animation: grainshift 0.9s steps(3) infinite;
+}
+@keyframes grainshift {
+  0%   { transform: translate(0, 0); }
+  33%  { transform: translate(-3%, 2%); }
+  66%  { transform: translate(2%, -3%); }
+  100% { transform: translate(0, 0); }
+}
+
+.glass, .rim { position: absolute; inset: 0; border-radius: 50%; pointer-events: none; }
+.glass {
+  background:
+    radial-gradient(ellipse 34% 22% at 30% 20%, rgba(255, 255, 255, 0.16), transparent 70%),
+    radial-gradient(ellipse 20% 12% at 72% 82%, rgba(255, 255, 255, 0.06), transparent 70%),
+    radial-gradient(circle at 50% 50%, transparent 52%, rgba(4, 4, 10, 0.55) 82%, rgba(4, 4, 10, 0.95) 100%);
+  z-index: 4;
+}
+.rim {
+  /* the hairline ring stays a shadow (zero blur, so no artefact); the glow
+     inside it becomes a gradient for the same reason as the sphere */
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--glow) 26%, transparent);
+  background: radial-gradient(circle at 50% 50%, transparent 62%, color-mix(in srgb, var(--glow) 16%, transparent) 100%);
+  z-index: 4;
+}
+
+.timeline { padding: 0.4rem 1.4rem 1.1rem; }
+.tl-label { font-size: 0.66rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--void-faint); margin-bottom: 0.5rem; }
+.tl-strip { display: flex; gap: 0.4rem; overflow-x: auto; padding-bottom: 0.35rem; scrollbar-width: thin; }
+
+.chip {
+  flex: 0 0 auto;
+  width: 46px;
+  padding: 0.35rem 0 0.3rem;
+  border: 1px solid var(--void-edge);
+  border-radius: 8px;
+  color: var(--void-faint);
+  font-size: 0.7rem;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+.chip:hover { color: var(--void-ink); border-color: rgba(160, 155, 200, 0.45); }
+.chip.active { color: var(--void-ink); border-color: color-mix(in srgb, var(--glow) 60%, transparent); background: color-mix(in srgb, var(--glow) 12%, transparent); }
+.chip.flash { box-shadow: 0 0 14px -4px var(--glow); }
+.chip-n { display: block; }
+.chip-bar { display: block; height: 2px; margin: 0.3rem 0.4rem 0; background: rgba(255, 255, 255, 0.08); border-radius: 2px; }
+.chip-bar i { display: block; height: 100%; background: color-mix(in srgb, var(--glow) 70%, transparent); border-radius: 2px; }
+
+.reveal {
+  position: absolute;
+  top: 0; right: 0;
+  width: min(320px, 42vw);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 1rem 1.1rem;
+  background: rgba(8, 8, 16, 0.86);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--void-edge);
+  border-radius: 14px;
+  font-size: 0.8rem;
+  z-index: 6;
+}
+.reveal section { margin-bottom: 1.1rem; }
+.reveal h3 { font-size: 0.66rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--void-faint); font-weight: 500; margin-bottom: 0.45rem; }
+.reveal h3 em { font-style: normal; color: var(--void-dim); }
+.reveal ul { list-style: none; }
+.reveal li { padding: 0.15rem 0; line-height: 1.35; }
+.reveal li.here { color: var(--void-ink); }
+.reveal li.gone { color: var(--void-faint); text-decoration: line-through; text-decoration-color: rgba(120, 115, 160, 0.4); }
+.reveal .note { color: var(--void-dim); line-height: 1.5; margin-bottom: 1rem; }
+
+/* ---------------------------------------------------------------- toast --- */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  top: 1.4rem;
+  transform: translate(-50%, -18px);
+  z-index: 60;
+  padding: 0.6rem 1.1rem;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font-family: var(--marker);
+  font-size: 1rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ----------------------------------------------------------- responsive --- */
+
+@media (max-width: 720px) {
+  /* the masthead wrapped onto three lines at 390px, so everything shrinks and
+     the sound control drops to its pip alone */
+  .masthead { padding: 0.85rem 0.9rem; gap: 0.5rem; }
+  .wordmark h1 { font-size: 1.45rem; }
+  .wordmark p { font-size: 0.78rem; white-space: nowrap; }
+  .top-actions { gap: 0.4rem; }
+  .top-actions .btn { padding: 0.44rem 0.72rem; font-size: 0.82rem; white-space: nowrap; }
+  .top-actions .btn-solid { font-size: 0.92rem; padding: 0.46rem 0.85rem; }
+  [data-role=soundlabel] { display: none; }
+  .top-actions .btn[data-act=sound] { padding: 0.5rem; }
+
+  .wall { top: 104px; left: 12px; right: 12px; bottom: 168px; }
+
+  /* the readout collapses to one row of figures — the breakdown and the
+     running commentary are desktop luxuries and were burying the wall */
+  .readout { left: 0.7rem; right: 0.7rem; bottom: 0.7rem; width: auto; padding: 0.6rem 0.8rem 0.7rem; }
+  .readout-figures { margin: 0.45rem 0 0.5rem; gap: 0.3rem; }
+  .figure b { font-size: 1.1rem; }
+  .figure span { font-size: 0.56rem; }
+  .moodkeys, .readout-now { display: none; }
+
+  /* the hint duplicated what mariinsky already says, and collided with her */
+  .garden-hint { display: none; }
+
+  .dog { width: 100px; right: 0.7rem; bottom: 7.2rem; }
+  .bubble { width: 176px; right: 72%; bottom: 66%; padding: 0.7rem 0.8rem 0.75rem; }
+  .bubble p { font-size: 0.95rem; }
+  /* side by side these wrapped to two lines each at 390px */
+  .bubble-actions { flex-direction: column; gap: 0.35rem; }
+  .bubble-actions button { font-size: 0.9rem; padding: 0.38rem 0.4rem; }
+
+  .ways { grid-template-columns: repeat(2, 1fr); }
+  .add { padding-top: 6.5rem; }
+  .hud-actions { width: 100%; justify-content: flex-end; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marble-body, .plate-inner, .grain, .dog-body, .dog-tail, .dog-ear-l, .dog-ear-r { animation: none !important; }
+  .plate, .marble { animation-duration: 0.01ms !important; }
+  .dog { transition-duration: 0.01ms; }
+}
+
+/* the masthead belongs to the garden; inside a memory the sphere's own hud
+   takes over, and a second set of controls would just be noise */
+/* visibility, not just opacity: `.masthead > *` re-enables pointer-events on
+   the children, so a transparent masthead still swallowed clicks aimed at the
+   orb's own controls underneath it */
+body.in-memory .masthead { opacity: 0; visibility: hidden; pointer-events: none; }
+.masthead { transition: opacity 0.4s, visibility 0.4s; }
+.linkish { color: inherit; border-bottom: 2px solid var(--dot-b); }
+
+
+/* you are already here */
+body.adding .masthead .btn-solid { display: none; }
