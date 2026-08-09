@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { AudioEngine } from "./audio/AudioEngine";
-import { requestMusicAnalysis } from "./api/analyzeMemory";
+import { submitMemory } from "./api/submitMemory";
 import type { MusicAnalysis } from "./audio/types";
 import MemoryInput from "./components/MemoryInput";
 import AudioVisualizer from "./components/AudioVisualizer";
@@ -49,14 +49,7 @@ export default function App() {
     setIsAnalyzing(true);
     setError(null);
     try {
-      // Start audio first so the context is unlocked by this user gesture,
-      // even though the analysis round-trip happens before anything sounds.
-      // resume() also covers submitting a memory while the score is paused.
-      await engine.ensureStarted();
-      engine.resume();
-
-      const analysis = await requestMusicAnalysis(text, engine.getState());
-      const newInstruments = engine.applyMusicAnalysis(analysis);
+      const { analysis, newInstruments } = await submitMemory(engine, text);
 
       setMemories((prev) => [
         ...prev,

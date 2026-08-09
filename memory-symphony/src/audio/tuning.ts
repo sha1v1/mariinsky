@@ -209,6 +209,17 @@ export function resetTuning(): Tuning {
   return getTuning();
 }
 
+// Per-field setters. Thin wrappers over setTuning(), exported individually so
+// an integrating UI can bind one control to one call without importing the
+// whole Tuning shape.
+export const setIntensity = (value: number): Tuning => setTuning({ intensity: value });
+export const setTransitionScale = (value: number): Tuning => setTuning({ transitionScale: value });
+export const setKeyMovement = (value: number): Tuning => setTuning({ keyMovement: value });
+export const setChordRate = (value: number): Tuning => setTuning({ chordRate: value });
+export const setAmbience = (value: AmbienceId): Tuning => setTuning({ ambience: value });
+export const setDisabledInstruments = (value: string[]): Tuning =>
+  setTuning({ disabledInstruments: value });
+
 /** Human-readable label for the current intensity, shown next to the slider. */
 export function describeIntensity(value: number): string {
   if (value <= 0.001) return "frozen";
@@ -238,18 +249,20 @@ export function describeKeyMovement(value: number): string {
   return interval === 1 ? "every cycle" : `every ${interval} cycles`;
 }
 
-// Console handle, so intensity can be changed mid-session without a reload —
-// reloading would discard the soundtrack you are trying to A/B against.
+// Console handle for manual testing — reuses the exported functions above
+// rather than duplicating them, so there is one implementation either way.
+// Reloading would discard the soundtrack you are trying to A/B against, so
+// this exists to let intensity etc. change mid-session without one.
 if (typeof window !== "undefined") {
   (window as any).memorySymphony = {
     getTuning,
     setTuning,
     resetTuning,
-    setIntensity: (value: number) => setTuning({ intensity: value }),
-    setTransitionScale: (value: number) => setTuning({ transitionScale: value }),
-    setKeyMovement: (value: number) => setTuning({ keyMovement: value }),
-    setAmbience: (value: AmbienceId) => setTuning({ ambience: value }),
-    setDisabledInstruments: (value: string[]) => setTuning({ disabledInstruments: value }),
-    setChordRate: (value: number) => setTuning({ chordRate: value }),
+    setIntensity,
+    setTransitionScale,
+    setKeyMovement,
+    setChordRate,
+    setAmbience,
+    setDisabledInstruments,
   };
 }
