@@ -7,10 +7,18 @@ from a different handful of its own fragments, and a little more of it is gone.
 ```bash
 npm install
 npm run seed     # optional: puts a few memories on the wall so it is not empty
-npm start        # http://localhost:5173
+npm run dev      # http://localhost:5173
 ```
 
-No build step. Node 18+, Express, and vanilla ES modules.
+Node 22.18+, Express, vanilla ES modules, and an embedded React/Vite 3D world.
+
+## The 3D Memory World
+
+The complete Memory World app lives in the `world/` workspace and is mounted by
+the same Express server at http://localhost:5173/world/. Its API handlers share
+the root `/api` namespace, and its persisted GLB/sprite paths are served by the
+same process. `npm run dev` provides Vite hot reload through Express; `npm start`
+builds the workspace and starts the complete production app with one command.
 
 ---
 

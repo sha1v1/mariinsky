@@ -140,6 +140,15 @@ a { color: inherit; text-decoration: none; }
   padding: 0.55rem 1.3rem;
 }
 .btn-solid:hover { color: #fff; background: #000; border-color: #000; }
+.btn-world {
+  border-color: color-mix(in srgb, var(--dot-a) 32%, var(--hairline));
+  color: color-mix(in srgb, var(--dot-a) 72%, var(--ink));
+  background: color-mix(in srgb, var(--paper) 88%, var(--dot-a));
+}
+.btn-world:hover {
+  border-color: var(--dot-a);
+  color: var(--dot-a);
+}
 
 .linkish { color: inherit; border-bottom: 2px solid var(--dot-b); }
 

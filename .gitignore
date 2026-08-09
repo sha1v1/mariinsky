@@ -7,3 +7,5 @@ data/orbs/*.json
 # holds the fal.ai key for semantic layer decomposition. .env.example is the
 # committed one, and it is empty.
 .env
+*.local
+/dist/

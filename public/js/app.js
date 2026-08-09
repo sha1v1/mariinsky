@@ -48,6 +48,7 @@ function shell() {
         <button class="btn" data-act="sound" aria-pressed="false" aria-label="toggle sound" title="sound">
           <span class="sound-pip"></span><span data-role="soundlabel">sound</span>
         </button>
+        <a class="btn btn-world" href="/world/"><span aria-hidden="true">✦</span> 3D world</a>
         <a class="btn btn-solid" href="#/add">add a memory</a>
       </div>
     </header>`);

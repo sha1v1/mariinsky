@@ -6,7 +6,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { marbleColor } from './public/js/marble.js';
 
 const run = promisify(execFile);
@@ -14,6 +14,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ORBS = path.join(__dirname, 'data', 'orbs');
 const UPLOADS = path.join(__dirname, 'uploads');
 const PREP = path.join(UPLOADS, '_prep');
+const WORLD_ROOT = path.join(__dirname, 'world');
+const WORLD_DIST = path.join(WORLD_ROOT, 'dist');
+const WORLD_API = path.join(WORLD_ROOT, 'api');
 fs.mkdirSync(ORBS, { recursive: true });
 fs.mkdirSync(PREP, { recursive: true });
 
@@ -83,10 +86,63 @@ try {
 
 const app = express();
 app.use(express.json({ limit: '8mb' }));
+
+// The React world uses Fetch-style API handlers. Adapt those handlers to this
+// Express process so Mariinsky and Memory World share one origin and server.
+const worldApiFiles = new Map([
+  ['hello', 'hello.ts'],
+  ['world', 'world.ts'],
+  ['submit', 'submit.ts'],
+  ['media/start', 'media/start.ts'],
+  ['media/status', 'media/status.ts'],
+  ['media/analyze', 'media/analyze.ts'],
+]);
+
+app.use('/api', async (req, res, next) => {
+  const route = req.path.replace(/^\/+|\/+$/g, '');
+  const apiFile = worldApiFiles.get(route);
+  if (!apiFile) return next();
+
+  try {
+    const file = path.join(WORLD_API, apiFile);
+    const cacheBust = process.env.NODE_ENV === 'development' ? `?t=${Date.now()}` : '';
+    const mod = await import(`${pathToFileURL(file).href}${cacheBust}`);
+    const handler = mod[req.method];
+    if (typeof handler !== 'function') {
+      res.status(405).send(`Method ${req.method} not allowed`);
+      return;
+    }
+
+    const headers = new Headers();
+    for (const [key, value] of Object.entries(req.headers)) {
+      if (value == null || key === 'content-length') continue;
+      headers.set(key, Array.isArray(value) ? value.join(', ') : value);
+    }
+    const method = req.method || 'GET';
+    const body = method === 'GET' || method === 'HEAD' ? undefined : JSON.stringify(req.body ?? {});
+    const request = new Request(`${req.protocol}://${req.get('host')}${req.originalUrl}`, {
+      method, headers, body,
+    });
+    const response = await handler(request);
+    res.status(response.status);
+    response.headers.forEach((value, key) => res.setHeader(key, value));
+    res.send(Buffer.from(await response.arrayBuffer()));
+  } catch (err) {
+    console.error(`[world api] ${req.method} ${req.originalUrl} failed`, err);
+    res.status(500).json({ error: 'World API request failed' });
+  }
+});
+
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache'),
 }));
 app.use('/files', express.static(UPLOADS, { maxAge: '1h' }));
+
+// Visual specs persist these root-relative URLs in Supabase. Keep them stable
+// even though the React application itself is mounted under /world.
+for (const directory of ['models', 'sprites', 'structures']) {
+  app.use(`/${directory}`, express.static(path.join(WORLD_ROOT, 'public', directory), { maxAge: '1h' }));
+}
 
 function reserveOrb(req, res, next) {
   req._orbId = newId();
@@ -626,8 +682,25 @@ async function sweepPrep() {
 }
 sweepPrep();
 
+// Vite runs inside Express during development. Production serves the same
+// workspace's built frontend from /world.
+if (process.env.NODE_ENV === 'production') {
+  app.use('/world', express.static(WORLD_DIST, { index: false, maxAge: '1h' }));
+  app.get(['/world', '/world/*'], (_req, res) => res.sendFile(path.join(WORLD_DIST, 'index.html')));
+} else {
+  const { createServer: createViteServer } = await import('vite');
+  const vite = await createViteServer({
+    root: WORLD_ROOT,
+    configFile: path.join(WORLD_ROOT, 'vite.config.ts'),
+    server: { middlewareMode: true },
+    appType: 'spa',
+  });
+  app.use(vite.middlewares);
+}
+
 const PORT = process.env.PORT || 5173;
 app.listen(PORT, () => {
   console.log(`\n  mariinsky  →  http://localhost:${PORT}`);
+  console.log(`  memory world →  http://localhost:${PORT}/world/`);
   console.log(`  ffmpeg fallback: ${FFMPEG || 'not installed (undecodable files will be skipped)'}\n`);
 });
