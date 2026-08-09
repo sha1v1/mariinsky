@@ -1,0 +1,957 @@
+/* ==========================================================================
+   mariinsky — a memory collective
+
+   Two worlds, on purpose.
+
+   THE COLLECTION is a page out of an i-spy book: bright paper inside a printed
+   border, objects scattered edge to edge, everything findable and nothing
+   labelled. It is public, it is flat, it is a lot at once. Most of what is on
+   it is clutter — that is the point of a hunt.
+
+   INSIDE A MEMORY is the opposite: one dark sphere, one thing at a time, and
+   it is coming apart. Going from one to the other should feel like putting
+   your eye to a hole in the page.
+
+   LEAVING A MEMORY uses the same door as opening one: a card over the frosted
+   collection, dismissed by clicking outside it. Backing out of writing should
+   cost exactly as little as backing out of reading.
+   ========================================================================== */
+
+:root {
+  /* the paper */
+  --paper:      #fdfcf8;
+  --paper-deep: #f4f1e8;
+  --ink:        #17161c;
+  --dim:        #6f6b78;
+  --faint:      #a5a0ad;
+  --hairline:   #e6e1d5;
+
+  /* the void, for the inside of a memory */
+  --void:       #08070d;
+  --void-ink:   #ece9f4;
+  --void-faint: #55516b;
+
+  /* the two i-dots of the wordmark, the printed border, and the hand-written
+     subtitle: the only fixed accents in the app. everything else that is
+     coloured is coloured by a memory. */
+  --dot-a:  #3d6fc4;
+  --dot-b:  #d8362a;
+  --scrawl: #4b3fa8;
+
+  --glow: #8fa9ff;
+
+  --display: "Newsreader", "Iowan Old Style", Palatino, Georgia, serif;
+  --marker:  "Patrick Hand", "Bradley Hand", "Segoe Print", cursive;
+  /* deliberately not one of the usual handwriting webfonts */
+  --hand:    "Sriracha", "Patrick Hand", "Bradley Hand", cursive;
+  --sans:    ui-sans-serif, -apple-system, "Segoe UI", Inter, system-ui, sans-serif;
+
+  --lift: 0 1px 1px rgba(30, 24, 10, 0.09), 0 6px 14px -6px rgba(30, 24, 10, 0.28);
+  --pop:  0 2px 4px rgba(30, 24, 10, 0.06), 0 24px 60px -18px rgba(30, 24, 10, 0.35);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: 0; }
+a { color: inherit; text-decoration: none; }
+
+:focus-visible {
+  outline: 2px solid var(--dot-a);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* the grain of the page itself — barely there, but it stops the white from
+   reading as a blank browser window */
+.paper {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(1100px 800px at 15% 0%, #ffffff, transparent 70%),
+    radial-gradient(900px 700px at 88% 100%, var(--paper-deep), transparent 66%),
+    var(--paper);
+}
+.paper::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.5;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.055'/%3E%3C/svg%3E");
+}
+
+/* The printed border. The huge same-colour spread outside it is the margin:
+   the page runs full-bleed underneath and the matte crops it, so objects are
+   cut off by the frame the way they are cut off by the edge of a real page. */
+.frame {
+  position: fixed;
+  inset: clamp(10px, 1.6vmin, 22px);
+  border: 3px solid var(--dot-a);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 55;
+  box-shadow: 0 0 0 clamp(10px, 1.6vmin, 22px) var(--paper);
+}
+
+.loading { padding: 24vh 2rem; text-align: center; color: var(--faint); letter-spacing: 0.06em; }
+
+/* ------------------------------------------------------------- buttons --- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.52rem 1.05rem;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--dim);
+  font-size: 0.87rem;
+  transition: color 0.18s, border-color 0.18s, background 0.18s;
+}
+.btn:hover { color: var(--ink); border-color: #cec6b2; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.btn-solid {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+  font-family: var(--marker);
+  font-size: 1.02rem;
+  letter-spacing: 0.03em;
+  padding: 0.55rem 1.3rem;
+}
+.btn-solid:hover { color: #fff; background: #000; border-color: #000; }
+
+.linkish { color: inherit; border-bottom: 2px solid var(--dot-b); }
+
+/* ------------------------------------------------------- the collection --- */
+
+/* An i-spy spread has no drop shadows and no cards. Objects sit *on* the paper,
+   flat, and the page is a fixed scale you move around rather than a layout that
+   reflows. So: a viewport-sized stage, an oversized page inside it, and drag. */
+.collection {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  touch-action: none;
+}
+.collection.pannable { cursor: grab; }
+.collection.grabbing { cursor: grabbing; }
+
+.page {
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform;
+}
+
+.wall, .clutter { position: absolute; inset: 0; }
+
+/* when a memory is open the page behind it goes to frosted glass, not blur:
+   still bright, still coloured, just unreachable */
+.collection.frosted .page {
+  filter: saturate(1.15) brightness(1.04);
+  transition: filter 0.5s;
+}
+
+/* ------------------------------------------------------------ a trinket --- */
+
+/* Everything on the page that is not a memory. Inert in every sense: no
+   pointer, no focus, no title, no hover. If it responded to anything it would
+   be a thing to check rather than a thing to look past. */
+.trinket {
+  position: absolute;
+  display: block;
+  pointer-events: none;
+  transform: translate(-50%, -50%) rotate(var(--turn, 0deg)) scaleX(var(--flip, 1));
+  opacity: 0.94;
+  animation: fadein 0.9s ease both;
+}
+.trinket svg { width: 100%; height: 100%; display: block; overflow: visible; }
+
+/* ------------------------------------------------------------- a marble --- */
+
+.marble {
+  position: absolute;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+  --decay: 0;
+  --marble: #888;
+  --twist: 0deg;
+  --hx: 32%;
+  --hy: 28%;
+  animation: settle 0.7s var(--in-delay, 0ms) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes settle {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* a memory arriving from the card it was just written in */
+.marble.landed { z-index: 30; }
+
+.marble-body {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 50% 50%,
+      rgba(255, 255, 255, 0) 38%,
+      color-mix(in srgb, var(--marble) 10%, transparent) 76%,
+      color-mix(in srgb, var(--marble) 22%, transparent) 100%),
+    radial-gradient(circle at 50% 50%, #ffffff 0%, #fdfcf9 60%, #efece3 88%, #ddd7c9 100%);
+  filter: saturate(calc(1 - var(--decay) * 0.5)) contrast(calc(1 - var(--decay) * 0.14));
+  transform: rotate(var(--twist));
+  transition: filter 0.5s, transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: bob var(--bob-dur, 8s) var(--bob-delay, 0s) ease-in-out infinite;
+}
+@keyframes bob {
+  0%, 100% { translate: 0 0; }
+  50%      { translate: 0 -4px; }
+}
+
+/* the interior, drawn per marble in swirl.js */
+.marble-swirl {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: calc(1 - var(--decay) * 0.42);
+  filter: blur(calc(0.4px + var(--decay) * 2.6px));
+}
+
+/* what makes it read as glass and not a disc: the rim darkens where the sphere
+   turns away, and a caustic burns where light focuses through it */
+.marble-glass {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 2;
+  background:
+    radial-gradient(circle at 71% 73%, color-mix(in srgb, var(--marble) 42%, white), transparent 18%),
+    radial-gradient(circle at 50% 50%, transparent 57%, rgba(72, 58, 34, 0.08) 85%, rgba(48, 38, 22, 0.22) 100%);
+}
+
+/* handled glass goes dusty rather than grey */
+.marble-haze {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 3;
+  opacity: calc(var(--decay) * 0.8);
+  background: radial-gradient(circle at 40% 36%, rgba(255, 255, 255, 0.72), rgba(250, 248, 242, 0.42) 52%, rgba(226, 220, 206, 0.5) 100%);
+}
+
+.marble-shine {
+  position: absolute;
+  left: var(--hx);
+  top: var(--hy);
+  width: 15%;
+  height: 10%;
+  border-radius: 50%;
+  background: #fff;
+  filter: blur(0.5px);
+  opacity: calc(0.95 - var(--decay) * 0.45);
+  z-index: 4;
+  pointer-events: none;
+  transform: translate(-50%, -50%) rotate(-26deg);
+}
+
+/* the title wraps itself around the glass. no card, no tail, no shadow --
+   the page names nothing until you go looking. */
+.marble-ring {
+  position: absolute;
+  inset: -34%;
+  width: 168%;
+  height: 168%;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+  animation: turn 26s linear infinite;
+}
+.marble-ring text {
+  font-family: var(--marker);
+  font-size: 7.2px;
+  letter-spacing: 0.06em;
+  fill: var(--ink);
+  paint-order: stroke;
+  stroke: rgba(253, 252, 248, 0.9);
+  stroke-width: 2px;
+}
+@keyframes turn { to { transform: rotate(360deg); } }
+
+.marble:hover .marble-ring,
+.marble:focus-visible .marble-ring { opacity: 0.85; }
+
+.marble:hover, .marble:focus-visible { z-index: 20; }
+.marble:hover .marble-body,
+.marble:focus-visible .marble-body {
+  animation-play-state: paused;
+  filter: saturate(calc(1.06 - var(--decay) * 0.3)) brightness(1.03);
+  transform: rotate(var(--twist)) scale(1.11);
+}
+.marble.sounding .marble-body { transform: rotate(var(--twist)) scale(1.14); }
+
+/* ---------------------------------------------------------------- hero --- */
+
+/* Mariinsky lies in the middle of the page with the title printed across her
+   side. The marbles and trinkets are laid out around this box, never over it. */
+.hero {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(820px, 96vw);
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.hero-dog {
+  width: 100%;
+  height: auto;
+  display: block;
+  grid-area: 1 / 1;
+  overflow: visible;
+}
+
+/* the words sit on her body; her head is well to the left of them */
+.hero-words {
+  grid-area: 1 / 1;
+  justify-self: center;
+  transform: translate(7%, -3%);
+  text-align: center;
+  pointer-events: none;
+}
+.hero-words h1 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(2.4rem, 6.4vw, 4.3rem);
+  letter-spacing: -0.015em;
+  line-height: 1;
+  color: var(--ink);
+}
+.hero-words .dot-a { color: var(--dot-a); }
+.hero-words .dot-b { color: var(--dot-b); }
+.hero-words p {
+  font-family: var(--hand);
+  font-size: clamp(0.95rem, 2vw, 1.32rem);
+  color: var(--scrawl);
+  margin-top: 0.55rem;
+  letter-spacing: 0.02em;
+}
+
+/* ------------------------------------------------------- she is alive --- */
+
+/* Four clocks, none of them a multiple of another, so the wag, the tongue, the
+   head and the eye never land together and she never reads as one looping gif.
+   Every one of them is still for most of its cycle. */
+
+.hero-tail {
+  transform-origin: 75% 69%;
+  animation: wag 11s ease-in-out infinite;
+}
+@keyframes wag {
+  0%, 58%, 100% { transform: rotate(0deg); }
+  62% { transform: rotate(-8deg); }
+  66% { transform: rotate(9deg); }
+  70% { transform: rotate(-7deg); }
+  74% { transform: rotate(8deg); }
+  78% { transform: rotate(-4deg); }
+  83% { transform: rotate(0deg); }
+}
+
+.hero-tongue {
+  transform-origin: 9% 43%;
+  animation: loll 9s ease-in-out infinite;
+}
+@keyframes loll {
+  0%, 70%, 100% { transform: rotate(0deg) translateY(0); }
+  75% { transform: rotate(7deg) translateY(3px); }
+  80% { transform: rotate(-5deg) translateY(1px); }
+  85% { transform: rotate(4deg) translateY(2px); }
+  91% { transform: rotate(0deg) translateY(0); }
+}
+
+/* she looks up at you, holds it, and goes back to lying there */
+.hero-head {
+  transform-origin: 22% 31%;
+  animation: lookup 17s cubic-bezier(0.4, 0, 0.3, 1) infinite;
+}
+@keyframes lookup {
+  0%, 44%, 100% { transform: rotate(0deg) translate(0, 0); }
+  49%, 62% { transform: rotate(-6deg) translate(0.4%, -1.2%); }
+  70% { transform: rotate(1.5deg) translate(0, 0); }
+}
+
+.hero-eye {
+  transform-origin: 20% 33%;
+  animation: blink 13s ease-in-out infinite;
+}
+@keyframes blink {
+  0%, 26%, 100% { transform: scaleY(1); }
+  28% { transform: scaleY(0.25); }
+  31% { transform: scaleY(1); }
+  33% { transform: scaleY(0.25); }
+  36% { transform: scaleY(1); }
+}
+
+/* --------------------------------------------------------- her thoughts --- */
+
+/* Three pips climb away from her head in a widening arc before the question
+   itself arrives. No outline on any of them: an inked border made the bubble
+   read as a sticker pasted over the page rather than as something of hers. */
+.thought {
+  position: absolute;
+  left: 11%;
+  bottom: 76%;
+  pointer-events: none;
+}
+/* white on white paper needs a shadow to have a shape at all, which is exactly
+   what the removed outline used to be doing */
+.thought-pip {
+  position: absolute;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 3px 10px -2px rgba(30, 24, 10, 0.4), 0 1px 2px rgba(30, 24, 10, 0.12);
+  opacity: 0;
+  transform: scale(0.4);
+}
+.thought-pip.one   { width: 8px;  height: 8px;  left: 0px;  bottom: -18px; }
+.thought-pip.two   { width: 13px; height: 13px; left: 30px; bottom: 10px; }
+.thought-pip.three { width: 20px; height: 20px; left: 72px; bottom: 46px; }
+
+.thought-bubble {
+  position: absolute;
+  left: 132px;
+  bottom: 102px;
+  width: max-content;
+  padding: 0.72rem 1.1rem;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: var(--pop);
+  color: var(--ink);
+  font-family: var(--hand);
+  font-size: 1.05rem;
+  white-space: nowrap;
+  opacity: 0;
+  transform: scale(0.85);
+  transform-origin: bottom left;
+  pointer-events: none;
+  transition: transform 0.18s, background 0.18s, color 0.18s;
+}
+
+.thought.thinking .thought-pip.one   { animation: pop 0.32s 0.10s forwards; }
+.thought.thinking .thought-pip.two   { animation: pop 0.32s 0.42s forwards; }
+.thought.thinking .thought-pip.three { animation: pop 0.32s 0.76s forwards; }
+.thought.thinking .thought-bubble {
+  animation: pop 0.4s 1.12s forwards;
+  pointer-events: auto;
+}
+@keyframes pop {
+  from { opacity: 0; transform: scale(0.4); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.thought.thinking .thought-bubble:hover { background: var(--ink); color: var(--paper); }
+
+/* --------------------------------------------- what opens over the page --- */
+
+#overlay { position: fixed; inset: 0; z-index: 50; pointer-events: none; }
+#overlay.on { pointer-events: auto; }
+
+.orbmodal, .addmodal {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  /* the contents are centred by the grid, so they stay centred at every size
+     and through every resize without anything being measured */
+}
+
+/* frosted glass over the collection: blurred, but still bright and still
+   saturated, so the marbles read as being behind glass rather than smudged */
+.orbscrim {
+  position: absolute;
+  inset: 0;
+  backdrop-filter: blur(16px) saturate(1.6) brightness(1.06);
+  -webkit-backdrop-filter: blur(16px) saturate(1.6) brightness(1.06);
+  background: rgba(253, 252, 248, 0.5);
+  animation: fadein 0.45s ease both;
+}
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+
+/* ---------------------------------------------------- a memory, opened --- */
+
+.orbstage {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+}
+
+.sphere {
+  --mx: 0; --my: 0; --decay: 0; --pulse: 1;
+  position: relative;
+  width: min(66vmin, 580px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 30% 22%, color-mix(in srgb, var(--g1) 82%, transparent), transparent 64%),
+    radial-gradient(circle at 78% 72%, color-mix(in srgb, var(--g2) 72%, transparent), transparent 62%),
+    radial-gradient(circle at 48% 102%, color-mix(in srgb, var(--g3) 66%, transparent), transparent 58%),
+    radial-gradient(circle at 50% 50%, #191527 38%, #0b0a14 100%);
+  box-shadow: 0 0 calc(80px * var(--pulse)) -10px color-mix(in srgb, var(--g1) calc(52% - var(--decay) * 34%), transparent);
+  transition: box-shadow 0.5s;
+}
+
+.orb-title {
+  position: absolute;
+  top: calc(100% + 1rem);
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: min(80vmin, 640px);
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(1rem, 2.2vw, 1.35rem);
+  color: var(--ink);
+  text-align: center;
+  line-height: 1.3;
+}
+/* the only readout left in here: what is present, and how far gone it is */
+.orb-sub {
+  position: absolute;
+  top: calc(100% + 2.6rem);
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 90vw;
+  font-size: 0.76rem;
+  letter-spacing: 0.05em;
+  color: var(--faint);
+  text-align: center;
+}
+.flashword { color: color-mix(in srgb, var(--dot-b) 80%, var(--ink)); }
+
+/* -------------------------------------------------- the inside of an orb --- */
+
+.collage {
+  position: absolute;
+  inset: 0;
+  filter: saturate(calc(1 - var(--decay) * 0.55)) brightness(calc(1 - var(--decay) * 0.2));
+  transition: filter 0.8s;
+}
+
+/* --- collage: everything at once, held still ----------------------------- */
+
+.plate {
+  position: absolute;
+  --o: 1; --z: 0.5; --r: 0deg;
+  opacity: var(--o);
+  transform:
+    translate(calc(-50% + var(--mx) * var(--z) * 70px), calc(-50% + var(--my) * var(--z) * 70px))
+    rotate(var(--r));
+  animation: appear 1.2s var(--in-delay, 0ms) cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  will-change: transform, opacity;
+}
+@keyframes appear {
+  from { opacity: 0; filter: blur(18px); }
+  to   { opacity: var(--o); filter: blur(0); }
+}
+
+.plate-inner {
+  position: relative;
+  width: 100%;
+  animation: drift var(--drift, 20s) var(--drift-delay, 0s) ease-in-out infinite;
+}
+@keyframes drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(0.8%, -1.8%, 0) scale(1.015); }
+}
+
+.plate-image .layer, .plate-image .layer canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.plate-image .layer { opacity: 0; transition: opacity 1.4s ease; }
+.plate-image .layer.ready { opacity: var(--layer-o, 1); }
+.plate-image .layer canvas { object-fit: contain; }
+
+.plate-video video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 3px;
+}
+
+.plate-text { text-align: left; }
+
+/* --- sequence: one thing at a time, filling the glass --------------------- */
+
+/* Beats are stacked in the same place and cross-faded by opacity alone, so the
+   browser can hand the whole thing to the compositor — a beat that changes
+   layout mid-fade stutters. */
+.seq-beat {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 1s ease;
+  will-change: opacity;
+}
+
+.seq-frame {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform-origin: center;
+  /* width/height/transform are set per beat: the rectangle is fitted to the
+     circle by a blend of cropping and stretching. See StreamPlayer.fit. */
+}
+
+.seq-layer, .seq-layer canvas, .seq-frame video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.seq-layer { opacity: 0; transition: opacity 0.45s ease; }
+.seq-layer.ready { opacity: var(--layer-o, 1); }
+.seq-layer canvas { object-fit: fill; }
+.seq-frame video { object-fit: fill; }
+
+.seq-flash .seq-frame { animation: vivid 2.6s ease-out; }
+
+/* text that holds for a beat sits with it and fades with it */
+.seq-block {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  text-align: center;
+  pointer-events: none;
+}
+.seq-block .frag { margin-bottom: 0.4em; }
+
+/* words on the other clock: never torn down with a beat, so they outlive the
+   picture they arrived over */
+.seq-drift {
+  position: absolute;
+  /* inset from the bounding box, because the sphere clips to a circle and the
+     corners of that box are outside the glass entirely */
+  inset: 12%;
+  pointer-events: none;
+  z-index: 4;
+}
+.seq-word {
+  position: absolute;
+  opacity: 0;
+  max-width: 60%;
+  text-align: center;
+  text-wrap: balance;
+  transition: opacity 1.2s ease;
+  will-change: opacity;
+}
+
+/* --- shared by both modes ------------------------------------------------ */
+
+.frag {
+  font-family: var(--display);
+  font-size: 1.02rem;
+  line-height: 1.45;
+  color: #f2f0fb;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.85), 0 0 40px rgba(0, 0, 0, 0.6);
+  margin-bottom: 0.55em;
+  text-wrap: pretty;
+}
+.frag.em { font-style: italic; color: color-mix(in srgb, var(--g1) 40%, #fff); }
+
+.flashed {
+  filter: drop-shadow(0 0 14px color-mix(in srgb, var(--g1) 70%, transparent)) !important;
+  animation: vivid 2.6s ease-out;
+}
+@keyframes vivid {
+  0%   { filter: brightness(2.4) drop-shadow(0 0 40px #fff); }
+  100% { filter: drop-shadow(0 0 14px color-mix(in srgb, var(--g1) 70%, transparent)); }
+}
+
+.sphere.flashing::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--g1) 55%, white), transparent 62%);
+  animation: bloom 2.4s ease-out forwards;
+  pointer-events: none;
+  z-index: 5;
+}
+@keyframes bloom { 0% { opacity: 0.55; } 100% { opacity: 0; } }
+
+.grain {
+  position: absolute;
+  inset: -20%;
+  pointer-events: none;
+  opacity: calc(var(--decay) * 0.6);
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+  animation: grainshift 0.9s steps(3) infinite;
+}
+@keyframes grainshift {
+  0%   { transform: translate(0, 0); }
+  33%  { transform: translate(-3%, 2%); }
+  66%  { transform: translate(2%, -3%); }
+  100% { transform: translate(0, 0); }
+}
+
+.glass, .rim { position: absolute; inset: 0; border-radius: 50%; pointer-events: none; }
+.glass {
+  background:
+    radial-gradient(ellipse 34% 22% at 30% 20%, rgba(255, 255, 255, 0.18), transparent 70%),
+    radial-gradient(ellipse 20% 12% at 72% 82%, rgba(255, 255, 255, 0.07), transparent 70%),
+    radial-gradient(circle at 50% 50%, transparent 52%, rgba(4, 4, 10, 0.5) 82%, rgba(4, 4, 10, 0.92) 100%);
+  z-index: 4;
+}
+.rim {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--g1) 30%, transparent);
+  background: radial-gradient(circle at 50% 50%, transparent 62%, color-mix(in srgb, var(--g1) 16%, transparent) 100%);
+  z-index: 4;
+}
+
+/* --------------------------------------------------------- contributing --- */
+
+/* The same door as a memory: a card over the frosted page, with the collection
+   still visible behind it. Clicking outside is how you leave, and leaving that
+   way creates nothing. */
+.addcard {
+  position: relative;
+  z-index: 2;
+  width: min(660px, calc(100vw - 3.5rem));
+  max-height: min(86vh, 900px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2rem 2rem 1.6rem;
+  background: rgba(255, 255, 255, 0.97);
+  border-radius: 22px;
+  box-shadow: var(--pop);
+  animation: cardin 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes cardin {
+  from { opacity: 0; transform: translateY(18px) scale(0.97); }
+  to   { opacity: 1; transform: none; }
+}
+/* it gets out of the way so the marble can be watched into its slot */
+.addcard.sealed {
+  animation: cardout 0.34s ease forwards;
+  pointer-events: none;
+}
+@keyframes cardout {
+  to { opacity: 0; transform: translateY(-10px) scale(0.94); }
+}
+
+.add-head { margin-bottom: 1.6rem; }
+.add-head h2 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(1.7rem, 4vw, 2.3rem);
+  letter-spacing: -0.015em;
+  line-height: 1.12;
+}
+.add-head p {
+  font-family: var(--marker);
+  font-size: 1.08rem;
+  color: var(--dim);
+  margin-top: 0.5rem;
+}
+
+/* the four ways in. one tap, then you are already contributing. */
+.ways { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.55rem; margin-bottom: 1.3rem; }
+.way {
+  padding: 0.95rem 0.5rem 0.8rem;
+  border: 1.5px solid var(--hairline);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.7);
+  text-align: center;
+  transition: border-color 0.18s, transform 0.18s, box-shadow 0.18s, background 0.18s;
+}
+.way:hover { transform: translateY(-2px); box-shadow: var(--lift); border-color: #d3ccbb; }
+.way.on { border-color: var(--ink); background: #fff; box-shadow: var(--lift); }
+.way svg { display: block; margin: 0 auto 0.4rem; }
+.way b { display: block; font-family: var(--marker); font-weight: 400; font-size: 1rem; }
+.way span { display: block; font-size: 0.66rem; color: var(--faint); margin-top: 0.1rem; }
+
+.panel {
+  border: 1.5px solid var(--hairline);
+  border-radius: 16px;
+  background: #fff;
+  padding: 1.2rem;
+  margin-bottom: 1.1rem;
+}
+.panel > label {
+  display: block;
+  font-size: 0.68rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 0.55rem;
+}
+
+textarea, input[type=text] {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font-family: var(--display);
+  font-size: 1.15rem;
+  line-height: 1.5;
+  resize: none;
+}
+textarea::placeholder, input::placeholder { color: var(--faint); }
+
+.drop {
+  border: 1.5px dashed var(--hairline);
+  border-radius: 14px;
+  padding: 2.2rem 1rem;
+  text-align: center;
+  color: var(--dim);
+  font-family: var(--marker);
+  font-size: 1.02rem;
+  transition: border-color 0.18s, background 0.18s;
+}
+.drop.over { border-color: var(--dot-a); background: color-mix(in srgb, var(--dot-a) 6%, transparent); }
+.drop button { color: var(--ink); border-bottom: 2px solid var(--dot-b); }
+
+.staged { list-style: none; margin-top: 0.8rem; display: flex; flex-direction: column; gap: 0.35rem; }
+.staged li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 9px;
+  background: var(--paper-deep);
+  font-size: 0.86rem;
+  color: var(--dim);
+}
+.staged b { font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink); }
+.staged .drop-one { margin-left: auto; color: var(--faint); font-size: 1.1rem; line-height: 1; padding: 0 0.2rem; }
+.staged .drop-one:hover { color: var(--dot-b); }
+
+/* recording */
+.rec { display: flex; align-items: center; gap: 1rem; }
+.rec-btn {
+  width: 62px; height: 62px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  transition: transform 0.18s, background 0.18s;
+}
+.rec-btn i { width: 20px; height: 20px; border-radius: 50%; background: var(--dot-b); display: block; transition: all 0.2s; }
+.rec-btn:hover { transform: scale(1.05); }
+.rec-btn.on i { width: 17px; height: 17px; border-radius: 3px; }
+.rec-btn.on { animation: recpulse 1.4s ease-in-out infinite; }
+@keyframes recpulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--dot-b) 45%, transparent); }
+  50%      { box-shadow: 0 0 0 12px transparent; }
+}
+.rec-meta { font-family: var(--marker); font-size: 1.05rem; color: var(--dim); }
+.rec-meta b { display: block; font-family: var(--display); font-size: 1.5rem; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* the live read of what the transformation is about to do */
+.reading {
+  border: 1.5px solid var(--hairline);
+  border-left: 4px solid var(--reading, var(--faint));
+  border-radius: 12px;
+  padding: 0.8rem 1rem;
+  background: rgba(255, 255, 255, 0.7);
+  font-size: 0.85rem;
+  color: var(--dim);
+  line-height: 1.5;
+  margin-bottom: 1.2rem;
+  transition: border-color 0.4s;
+}
+.reading b { color: var(--ink); font-weight: 500; }
+.reading .lede {
+  display: block;
+  font-size: 0.66rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 0.3rem;
+}
+
+.add-actions { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.status { font-size: 0.85rem; color: var(--dim); font-family: var(--marker); }
+
+/* ---------------------------------------------------------------- toast --- */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  top: 1.4rem;
+  transform: translate(-50%, -18px);
+  z-index: 60;
+  padding: 0.6rem 1.1rem;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font-family: var(--marker);
+  font-size: 1rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ----------------------------------------------------------- responsive --- */
+
+@media (max-width: 720px) {
+  /* at 390px her head ran into the "m". the hero is allowed to overhang the
+     viewport so she keeps her proportions and her head stays clear of the
+     type, which still sits dead centre of the screen. */
+  /* on a narrow screen she fits rather than overhangs. an earlier version let
+     her run off both edges to keep her size up, and it cost her nose and her
+     tongue — a cropped face reads as a bug, not as a crop */
+  .hero { width: 98vw; }
+  .hero-words { transform: translate(11%, -2%); }
+  .hero-words h1 { font-size: 2.1rem; }
+  .hero-words p { font-size: 0.9rem; }
+  .thought { left: 13%; bottom: 78%; }
+  .thought-pip.two   { left: 22px; bottom: 8px; }
+  .thought-pip.three { left: 52px; bottom: 34px; }
+  .thought-bubble { font-size: 0.95rem; padding: 0.6rem 0.9rem; left: 84px; bottom: 66px; }
+  .marble-ring text { font-size: 8.4px; }
+
+  .ways { grid-template-columns: repeat(2, 1fr); }
+  .addcard { width: calc(100vw - 1.6rem); padding: 1.4rem 1.2rem 1.2rem; max-height: 88vh; }
+  .sphere { width: min(78vmin, 480px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marble-body, .plate-inner, .grain, .marble-ring,
+  .hero-tail, .hero-tongue, .hero-head, .hero-eye { animation: none !important; }
+  .plate, .marble, .trinket, .addcard { animation-duration: 0.01ms !important; }
+  .thought-pip, .thought-bubble { animation-duration: 0.01ms !important; }
+  .seq-beat, .seq-word, .seq-layer { transition-duration: 0.01ms !important; }
+  .seq-flash .seq-frame { animation: none; }
+}
