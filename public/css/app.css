@@ -415,85 +415,15 @@ body.immersive .frame { opacity: 0; visibility: hidden; transition: opacity 0.4s
   overflow: visible;
 }
 
-/* the words sit on her body; her head is well to the left of them */
+/* the title is lettered onto her side in the artwork itself; this heading
+   exists only for screen readers and the document outline */
 .hero-words {
-  grid-area: 1 / 1;
-  justify-self: center;
-  transform: translate(7%, -3%);
-  text-align: center;
-  pointer-events: none;
-}
-.hero-words h1 {
-  font-family: var(--display);
-  font-weight: 400;
-  font-size: clamp(2.4rem, 6.4vw, 4.3rem);
-  letter-spacing: -0.015em;
-  line-height: 1;
-  color: var(--ink);
-}
-.hero-words .dot-a { color: var(--dot-a); }
-.hero-words .dot-b { color: var(--dot-b); }
-.hero-words p {
-  font-family: var(--hand);
-  font-size: clamp(0.95rem, 2vw, 1.32rem);
-  color: var(--scrawl);
-  margin-top: 0.55rem;
-  letter-spacing: 0.02em;
-}
-
-/* ------------------------------------------------------- she is alive --- */
-
-/* Four clocks, none of them a multiple of another, so the wag, the tongue, the
-   head and the eye never land together and she never reads as one looping gif.
-   Every one of them is still for most of its cycle. */
-
-.hero-tail {
-  transform-origin: 75% 69%;
-  animation: wag 11s ease-in-out infinite;
-}
-@keyframes wag {
-  0%, 58%, 100% { transform: rotate(0deg); }
-  62% { transform: rotate(-8deg); }
-  66% { transform: rotate(9deg); }
-  70% { transform: rotate(-7deg); }
-  74% { transform: rotate(8deg); }
-  78% { transform: rotate(-4deg); }
-  83% { transform: rotate(0deg); }
-}
-
-.hero-tongue {
-  transform-origin: 9% 43%;
-  animation: loll 9s ease-in-out infinite;
-}
-@keyframes loll {
-  0%, 70%, 100% { transform: rotate(0deg) translateY(0); }
-  75% { transform: rotate(7deg) translateY(3px); }
-  80% { transform: rotate(-5deg) translateY(1px); }
-  85% { transform: rotate(4deg) translateY(2px); }
-  91% { transform: rotate(0deg) translateY(0); }
-}
-
-/* she looks up at you, holds it, and goes back to lying there */
-.hero-head {
-  transform-origin: 22% 31%;
-  animation: lookup 17s cubic-bezier(0.4, 0, 0.3, 1) infinite;
-}
-@keyframes lookup {
-  0%, 44%, 100% { transform: rotate(0deg) translate(0, 0); }
-  49%, 62% { transform: rotate(-6deg) translate(0.4%, -1.2%); }
-  70% { transform: rotate(1.5deg) translate(0, 0); }
-}
-
-.hero-eye {
-  transform-origin: 20% 33%;
-  animation: blink 13s ease-in-out infinite;
-}
-@keyframes blink {
-  0%, 26%, 100% { transform: scaleY(1); }
-  28% { transform: scaleY(0.25); }
-  31% { transform: scaleY(1); }
-  33% { transform: scaleY(0.25); }
-  36% { transform: scaleY(1); }
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* --------------------------------------------------------- her thoughts --- */
@@ -1490,16 +1420,10 @@ body.immersive .frame { opacity: 0; visibility: hidden; transition: opacity 0.4s
 /* ----------------------------------------------------------- responsive --- */
 
 @media (max-width: 720px) {
-  /* at 390px her head ran into the "m". the hero is allowed to overhang the
-     viewport so she keeps her proportions and her head stays clear of the
-     type, which still sits dead centre of the screen. */
   /* on a narrow screen she fits rather than overhangs. an earlier version let
      her run off both edges to keep her size up, and it cost her nose and her
      tongue — a cropped face reads as a bug, not as a crop */
   .hero { width: 98vw; }
-  .hero-words { transform: translate(11%, -2%); }
-  .hero-words h1 { font-size: 2.1rem; }
-  .hero-words p { font-size: 0.9rem; }
   .thought { left: 13%; bottom: 78%; }
   .thought-pip.two   { left: 22px; bottom: 8px; }
   .thought-pip.three { left: 52px; bottom: 34px; }
@@ -1556,8 +1480,7 @@ body.immersive .frame { opacity: 0; visibility: hidden; transition: opacity 0.4s
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .marble-body, .plate-inner, .grain, .marble-ring,
-  .hero-tail, .hero-tongue, .hero-head, .hero-eye { animation: none !important; }
+  .marble-body, .plate-inner, .grain, .marble-ring { animation: none !important; }
   .plate, .marble, .trinket, .addorb { animation-duration: 0.01ms !important; }
   .thought-pip, .thought-bubble { animation-duration: 0.01ms !important; }
   .seq-beat, .seq-word, .seq-layer { transition-duration: 0.01ms !important; }
