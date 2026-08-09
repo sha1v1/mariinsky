@@ -10,6 +10,7 @@ import { OrbAudio } from './orbaudio.js';
 import { Garden } from './garden.js';
 import { Contribute } from './contribute.js';
 import { OrbView } from './orbview.js';
+import { LabView } from './lab.js';
 
 const root = document.getElementById('app');
 const overlay = document.getElementById('overlay');
@@ -44,50 +45,27 @@ function shell() {
     <div class="frame" aria-hidden="true"></div>
     <header class="masthead">
       <div class="top-actions">
-        <button class="btn" data-act="sound" aria-pressed="false" aria-label="toggle sound" title="sound">
-          <span class="sound-pip"></span><span data-role="soundlabel">sound</span>
-        </button>
         <a class="btn btn-solid" href="#/add">add a memory</a>
       </div>
     </header>`);
   document.body.insertAdjacentHTML('beforeend', '<div class="toast" data-role="toast" role="status"></div>');
 
-  const soundBtn = document.querySelector('[data-act=sound]');
-  const soundLabel = soundBtn.querySelector('[data-role=soundlabel]');
-
-  const reflect = () => {
-    const on = scape.running && !scape.muted;
-    soundBtn.classList.toggle('sound-on', on);
-    soundBtn.setAttribute('aria-pressed', String(on));
-    soundLabel.textContent = on ? 'sound on' : scape.running ? 'sound off' : 'turn on sound';
-  };
-
-  soundBtn.addEventListener('click', async () => {
-    await scape.ensure();
-    scape.setMuted(scape.running ? !scape.muted : false);
-    if (!scape.muted) scape.fadeMaster(1, 1.2);
-    reflect();
-  });
-
   // Browsers will not start audio without a gesture. The first one anywhere
-  // wakes the collection up, so nobody has to hunt for a play button.
+  // wakes the collection up. There is no sound control on the collection any
+  // more: the room is the room, and the one place sound is genuinely a decision
+  // -- inside a memory, where its own recording is playing over the top -- has
+  // kept its own toggle in the orb's chrome.
   const wake = async () => {
     await scape.ensure();
     await orbAudio.ensure();
     if (scape.running) {
       if (!scape.muted) scape.fadeMaster(1, 2);
-      reflect();
       document.removeEventListener('pointerdown', wake);
       document.removeEventListener('keydown', wake);
     }
   };
   document.addEventListener('pointerdown', wake, { passive: true });
   document.addEventListener('keydown', wake);
-
-  // The audioscape can also be muted or suspended from outside this button --
-  // by a memory ducking it, or by the browser suspending the context on a
-  // background tab -- so the label is re-checked rather than only written to.
-  setInterval(reflect, 1500);
 
   // Closing the tab is the most common way to leave a sequence mid-run, and it
   // is the one route that never fires `hashchange`.
@@ -120,6 +98,7 @@ function closeOverlay() {
   // contribution card, the overlay owns the screen and a second set of controls
   // would just be noise -- so it is taken away rather than frosted over.
   document.body.classList.remove('overlay-on');
+  document.body.classList.remove('immersive');
   garden?.frost(false);
   orbAudio.stop(0.5);
   scape.duck(1, 1.4);
@@ -128,13 +107,23 @@ function closeOverlay() {
 async function route() {
   const hash = location.hash || '#/';
 
-  if (hash.startsWith('#/orb/')) {
+  // A memory and its laboratory are the same view with different chrome, and
+  // both take the whole screen: the collection is not torn down behind them,
+  // only covered, so stepping between orb and bench and back out again costs
+  // nothing but the fetch.
+  if (hash.startsWith('#/orb/') || hash.startsWith('#/lab/')) {
+    const bench = hash.startsWith('#/lab/');
     await ensureGarden();
     closeOverlay();
     overlay.classList.add('on');
     document.body.classList.add('overlay-on');
     garden.frost(true);
-    orb = new OrbView(overlay, orbAudio, scape, session);
+    // The printed border belongs to the page, and a memory is not on the page
+    // any more -- it is the whole screen. The contribution card, which really
+    // is a card laid over the collection, keeps its frame.
+    document.body.classList.add('immersive');
+    const View = bench ? LabView : OrbView;
+    orb = new View(overlay, orbAudio, scape, session);
     try {
       await orb.open(hash.slice(6));
     } catch {

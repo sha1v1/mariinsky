@@ -10,8 +10,7 @@ import { mulberry32 } from './rng.js';
 import { marbleTraits, hashId } from './marble.js';
 import { swirlSvg } from './swirl.js';
 import { Mascot } from './mascot.js';
-import { trinketFor, trinketEl } from './trinkets.js';
-import { loadItems, matchItem, fitRotated, itemSrc } from './items.js';
+import { loadItems, assignItems, fitRotated, itemSrc } from './items.js';
 
 const HOVER_DWELL = 170;   // ms before a marble starts sounding
 
@@ -20,7 +19,7 @@ const HOVER_DWELL = 170;   // ms before a marble starts sounding
 // image is laid out by the same pass that is trying to measure it -- so the one
 // number that cannot be derived is written down here and the stylesheet is told
 // her width rather than choosing it.
-const HERO_ASPECT = 1638 / 1126;
+const HERO_ASPECT = 1706 / 1222;   // the clip's own frame; mirrored in .hero-image
 const HERO_MAX = 480;      // px. she used to be 820 and swallowed the middle of the page
 const HERO_SHARE = 0.46;   // ...or this much of the window, whichever is less
 const HERO_SHARE_NARROW = 0.56;   // a phone has less paper to spare her
@@ -29,6 +28,21 @@ const NARROW_PX = 720;     // must match the stylesheet's breakpoint: below it h
 const HERO_PAD = 14;       // clear paper kept around her on every side
 
 const GAP = 6;             // px of guaranteed air between any two objects
+
+// A cell is chosen to suit how many memories there are (see `layout`). These
+// are the ends of that range: below CELL_MIN the page grows and pans instead,
+// above CELL_MAX a nearly-empty wall would be a handful of billboards.
+const CELL_MIN = 104;
+const CELL_MAX = 260;
+
+// Every object is turned and sized at random within a range, seeded by its own
+// id. Both ranges are deliberately modest: past about a third of a turn a
+// photographed object stops reading as *lying there* and starts reading as
+// broken, and a size range any wider than this makes the small ones look like
+// dirt on the page rather than things to find.
+const MAX_TURN = 34;       // degrees, either way
+const SIZE_MIN = 0.58;     // of the cell's usable square
+const SIZE_MAX = 1.00;
 
 export class Garden {
   constructor(root, scape, session) {
@@ -48,7 +62,6 @@ export class Garden {
     this.root.innerHTML = `
       <div class="collection" data-role="stage">
         <div class="page" data-role="page">
-          <div class="clutter" data-role="clutter" aria-hidden="true"></div>
           <div class="wall" data-role="wall"></div>
           ${Mascot.markup()}
         </div>
@@ -57,7 +70,6 @@ export class Garden {
     this.stage = this.root.querySelector('[data-role=stage]');
     this.page = this.root.querySelector('[data-role=page]');
     this.wallEl = this.root.querySelector('[data-role=wall]');
-    this.clutterEl = this.root.querySelector('[data-role=clutter]');
 
     // The object library has to be in hand before the first draw: what a memory
     // is a picture of decides how big its box is, and the boxes are the layout.
@@ -90,10 +102,12 @@ export class Garden {
    * that fall under Mariinsky are struck out before anything is placed, so she
    * is never crowded and never covered.
    *
-   * Every cell a memory did not take gets a trinket, so the page is full at any
-   * wall size. That is not decoration for its own sake: a hunt needs something
-   * to hunt through, and eleven marbles alone on white paper is not a page out
-   * of an i-spy book, it is a dashboard.
+   * Every object on the page is a memory. There used to be inert filler in the
+   * cells the memories did not take, to keep the spread dense; it is gone,
+   * because a page where half the things do not answer teaches you to stop
+   * touching things. Density now comes from the grid instead: it is sized to
+   * the wall, so a small wall is a few large objects rather than a few small
+   * ones adrift in white.
    *
    * The grid is sized to the *window* first: rows and columns are chosen so a
    * wall that fits lands inside one screen exactly, margins included, and
@@ -103,10 +117,9 @@ export class Garden {
    * to fit, not the resting state of a page with eleven things on it.
    */
   layout() {
-    const n = this.wall.length;
+    const n = Math.max(1, this.wall.length);
     const vw = this.stage.clientWidth || 1200;
     const vh = this.stage.clientHeight || 800;
-    const narrow = vw < 620;
 
     // Keep the grid inside the printed border. `.frame` is inset by
     // clamp(10px, 1.6vmin, 22px) and is 3px thick, and its matte crops whatever
@@ -116,12 +129,6 @@ export class Garden {
     const gw = Math.max(1, vw - m * 2);
     const gh = Math.max(1, vh - m * 2);
 
-    const target = narrow ? 88 : 116;
-    const cols = Math.max(2, Math.round(gw / target));
-    const cellW = gw / cols;
-    const fitRows = Math.max(1, Math.round(gh / cellW));
-    const cellH = gh / fitRows;
-
     // Mariinsky, in page coordinates. The stylesheet is handed this width so
     // the two can never drift apart -- the old pair of hand-kept numbers said
     // she was 320 tall while she was really rendering at 564, which is exactly
@@ -130,23 +137,46 @@ export class Garden {
     const heroH = heroW / HERO_ASPECT;
     this.hero = { w: heroW, h: heroH };
 
-    // Grow rows only if the screenful cannot hold the memories.
-    let rows = fitRows;
-    let cells = [];
-    for (let guard = 0; guard < 200; guard++) {
+    /** How many cells survive the hole cut for her, at a given grid. */
+    const usable = (cols, rows, cellW, cellH) => {
       const H = m * 2 + rows * cellH;
       const hx0 = (vw - heroW) / 2 - HERO_PAD, hx1 = hx0 + heroW + HERO_PAD * 2;
       const hy0 = (H - heroH) / 2 - HERO_PAD, hy1 = hy0 + heroH + HERO_PAD * 2;
-      cells = [];
+      const out = [];
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
           const x0 = m + c * cellW, y0 = m + r * cellH;
           const clash = x0 < hx1 && x0 + cellW > hx0 && y0 < hy1 && y0 + cellH > hy0;
-          if (!clash) cells.push({ c, r });
+          if (!clash) out.push({ c, r });
         }
       }
-      if (cells.length >= n) break;
+      return out;
+    };
+
+    // The grid is chosen for the number of memories, not for a fixed object
+    // size. Now that nothing on the page is filler, a wall of eleven laid out on
+    // a grid built for forty is eleven things adrift in white -- so the coarsest
+    // grid that still holds them all wins, and the objects get correspondingly
+    // bigger. As the wall fills, cells shrink back toward CELL_MIN; past that
+    // the page grows taller than the window and you drag it.
+    let cols = Math.max(2, Math.floor(gw / CELL_MIN));
+    let cellW = gw / cols;
+    let rows = Math.max(1, Math.round(gh / cellW));
+    let cellH = gh / rows;
+    for (let c = 2; c <= Math.max(2, Math.floor(gw / CELL_MIN)); c++) {
+      const w = gw / c;
+      if (w > CELL_MAX) continue;
+      const r = Math.max(1, Math.round(gh / w));
+      if (usable(c, r, w, gh / r).length >= n) { cols = c; cellW = w; rows = r; cellH = gh / r; break; }
+    }
+
+    // Still not enough at the tightest grid: the page grows downward. It never
+    // shrinks the objects further to cram them in, because an i-spy page is a
+    // fixed scale you move around, not a diagram that reflows.
+    let cells = usable(cols, rows, cellW, cellH);
+    for (let guard = 0; guard < 400 && cells.length < n; guard++) {
       rows++;
+      cells = usable(cols, rows, cellW, cellH);
     }
 
     // Order the cells so that any prefix is spread over the whole page instead
@@ -160,53 +190,55 @@ export class Garden {
 
     // The largest square that can sit in a cell and still leave air around it.
     const avail = Math.max(8, Math.min(cellW, cellH) - GAP);
-    const at = (spot, box, jx, jy) => ({
-      x: m + spot.c * cellW + cellW / 2 + (jx - 0.5) * 2 * Math.max(0, (cellW - box) / 2 - 1),
-      y: m + spot.r * cellH + cellH / 2 + (jy - 0.5) * 2 * Math.max(0, (cellH - box) / 2 - 1),
-    });
 
-    const fragMax = Math.max(...this.wall.map((mem) => mem.fragments || 1), 1);
     // Oldest first, so a new memory takes the next free cell rather than
     // shunting everybody else along.
     const ordered = this.wall.slice().sort((a, b) => a.createdAt - b.createdAt);
 
-    const used = new Set();
-    const place = ordered.map((memory, i) => {
+    // Size, angle and jitter are drawn from the memory's own id, so they are
+    // random-looking but identical on every load and to every visitor -- the
+    // same promise the marble colours make. Size is deliberately *not* tied to
+    // anything about the memory: an i-spy page is a jumble of things that
+    // happen to be different sizes, and a page where size meant something would
+    // be a chart.
+    const spots = [];
+    const rngs = [];
+    const boxes = [];
+    ordered.forEach((memory, i) => {
       const spot = cells[i % Math.max(1, cells.length)];
       const rng = mulberry32(hashId(memory.id) ^ 0x5f3a);
-      const weight = Math.sqrt((memory.fragments || 1) / fragMax);
-      const item = matchItem(memory, used);
-      if (item) used.add(item.id);
-      const box = avail * (0.50 + 0.26 * weight);
-      // A memory lies almost square to the page. The junk around it is thrown
-      // down at any angle, and that difference is doing quiet work: it is the
-      // first thing that makes one of these read as placed rather than spilt.
-      const turn = item ? (rng() - 0.5) * 26 : 0;
-      return { memory, item, turn, box, ...at(spot, box, rng(), rng()) };
+      const box = avail * (SIZE_MIN + rng() * (SIZE_MAX - SIZE_MIN));
+      const jx = rng(), jy = rng();
+      rngs.push(rng);
+      boxes.push(box);
+      spots.push({
+        x: m + spot.c * cellW + cellW / 2 + (jx - 0.5) * 2 * Math.max(0, (cellW - box) / 2 - 1),
+        y: m + spot.r * cellH + cellH / 2 + (jy - 0.5) * 2 * Math.max(0, (cellH - box) / 2 - 1),
+      });
     });
 
-    // Whatever the memories left over. Same jitter rule, so a trinket is no
-    // more able to touch its neighbour than a marble is.
-    const clutter = cells.slice(n).map((spot) => {
-      const t = trinketFor(spot.c, spot.r);
-      if (!t) return null;
-      const box = avail * t.scale;
-      return { t, box, ...at(spot, box, t.jx, t.jy) };
-    }).filter(Boolean);
+    // One pass, with the positions already known, so "do not put two of these
+    // next to each other" is a question the assignment can actually answer.
+    const items = assignItems(ordered, spots);
 
-    return { place, clutter, W: vw, H: m * 2 + rows * cellH };
+    const place = ordered.map((memory, i) => ({
+      memory,
+      item: items[i],
+      box: boxes[i],
+      turn: items[i] ? (rngs[i]() - 0.5) * 2 * MAX_TURN : 0,
+      ...spots[i],
+    }));
+
+    return { place, W: vw, H: m * 2 + rows * cellH };
   }
 
   draw() {
-    const { place, clutter, W, H } = this.layout();
+    const { place, W, H } = this.layout();
     this.bounds = { w: W, h: H };
     this.page.style.width = `${W}px`;
     this.page.style.height = `${H}px`;
     this.page.style.setProperty('--hero-w', `${this.hero.w}px`);
-
-    const junk = document.createDocumentFragment();
-    clutter.forEach(({ t, box, x, y }) => junk.appendChild(trinketEl(t, box, x, y)));
-    this.clutterEl.replaceChildren(junk);
+    this.page.style.setProperty('--hero-h', `${this.hero.h}px`);
 
     const frag = document.createDocumentFragment();
     place.forEach((p, i) => frag.appendChild(this.marbleEl(p, i)));

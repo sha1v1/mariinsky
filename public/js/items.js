@@ -1,11 +1,9 @@
 // The objects on the page.
 //
-// Everything lying on the paper -- a memory and the junk around it alike -- is a
+// Every object lying on the paper is a memory, and every memory is a
 // photographic cut-out out of `public/images/items/`, built from the asset
-// library by `scripts/items.mjs`. Two things come out of this module:
-//
-//   matchItem(memory)     the object a memory *is*, read off what it says
-//   fillerItem(col, row)  the object in a cell no memory took
+// library by `scripts/items.mjs`. Nothing on the page is filler any more: if
+// you can see it, there is a record behind it and clicking it opens something.
 //
 // A memory is matched to an object by its own words: "the smell of bakery
 // bread" is a pretzel, "my sister's birthday" is a slice of cake. When nothing
@@ -20,8 +18,14 @@
 // strengths: `strong` is the object itself or an unmistakable cue for it, `weak`
 // is an association. It takes one strong hit or two weak ones to beat the
 // marble, so a single glancing word never renames a memory.
-
-import { mulberry32 } from './rng.js';
+//
+// On top of the score sits a **spread** rule, which matters more the fuller the
+// wall gets: a hundred memories mentioning a birthday would otherwise be a
+// hundred identical slices of cake. Among candidates within a point of the best
+// score, the one that lands furthest from another copy of itself -- and from
+// anything in the same family, so two kinds of leaf do not end up side by side
+// either -- wins. Repetition is allowed; repetition *in the same glance* is
+// what makes a page of objects read as wallpaper.
 
 const STRONG = 2;
 const WEAK = 1;
@@ -35,7 +39,7 @@ const TAGS = {
   'bandaid':              { strong: ['bandaid', 'band-aid', 'plaster'], weak: ['scrape', 'grazed', 'knee', 'stitches', 'hospital', 'fell over', 'hurt'] },
   'birthday-cake-slice':  { strong: ['birthday', 'cake'], weak: ['candles', 'party', 'blew out', 'blow out', 'wish', 'celebrat', 'turning'] },
   'blueberry':            { strong: ['blueberr'], weak: ['berries', 'picking', 'jam', 'muffin'] },
-  'button':               { strong: ['button'], weak: ['sewing', 'cardigan', 'coat', 'shirt', 'jar'] },
+  'button':               { strong: ['button'], weak: ['sewing', 'cardigan', 'coat', 'shirt', 'jar', 'ordinary', 'nothing happened', 'plain', 'tuesday'] },
   'cherry':               { strong: ['cherry', 'cherries'], weak: ['blossom', 'pie', 'orchard', 'stem'] },
   'chestnut':             { strong: ['chestnut', 'conker'], weak: ['roast', 'autumn', 'fall'] },
   'chocolate-chip-cookie': { strong: ['cookie', 'biscuit'], weak: ['baking', 'bake', 'dough', 'oven', 'chocolate', 'kitchen'] },
@@ -43,15 +47,15 @@ const TAGS = {
   'coral':                { strong: ['coral', 'reef'], weak: ['snorkel', 'diving', 'tropical', 'ocean'] },
   'crayon':               { strong: ['crayon'], weak: ['colouring', 'coloring', 'drawing', 'drew', 'kindergarten', 'school'] },
   'cupcake':              { strong: ['cupcake'], weak: ['frosting', 'icing', 'sprinkles', 'bake sale'] },
-  'daisy':                { strong: ['daisy', 'daisies'], weak: ['flower', 'meadow', 'field', 'spring', 'chain', 'garden'] },
-  'dandelion':            { strong: ['dandelion'], weak: ['wish', 'blowing', 'seeds', 'lawn', 'weeds', 'puff'] },
+  'daisy':                { strong: ['daisy', 'daisies'], weak: ['flower', 'meadow', 'field', 'spring', 'chain', 'garden', 'wedding', 'bouquet'] },
+  'dandelion':            { strong: ['dandelion'], weak: ['wish', 'blowing', 'seeds', 'lawn', 'weeds', 'puff', 'sunny', 'afternoon'] },
   'donut':                { strong: ['donut', 'doughnut'], weak: ['glazed', 'sprinkles', 'coffee'] },
   'driftwood':            { strong: ['driftwood'], weak: ['beach', 'shore', 'tide', 'washed up', 'lake', 'log', 'river'] },
   'feather':              { strong: ['feather'], weak: ['bird', 'wing', 'pigeon', 'nest', 'flying', 'flight'] },
   'four-leaf-clover':     { strong: ['clover', 'four-leaf'], weak: ['luck', 'lucky', 'grass', 'fortune', 'wish'] },
   'gummy-bear':           { strong: ['gummy'], weak: ['candy', 'sweets', 'corner shop', 'sour', 'pick and mix'] },
   'ice-cream-cone':       { strong: ['ice cream', 'ice-cream', 'icecream', 'gelato'], weak: ['cone', 'summer', 'melting', 'scoop', 'van', 'shop'] },
-  'key':                  { strong: ['key', 'keys'], weak: ['door', 'lock', 'moving', 'apartment', 'flat', 'my own place', 'hallway'] },
+  'key':                  { strong: ['key', 'keys'], weak: ['door', 'lock', 'moving', 'apartment', 'flat', 'my own place', 'hallway', 'house', 'porch'] },
   'ladybug':              { strong: ['ladybug', 'ladybird'], weak: ['bug', 'beetle', 'insect', 'garden', 'crawl'] },
   'lemon':                { strong: ['lemon'], weak: ['lemonade', 'sour', 'citrus', 'tea'] },
   'lollipop':             { strong: ['lollipop', 'lolly'], weak: ['candy', 'sweet', 'dentist', 'fair', 'shop'] },
@@ -64,25 +68,45 @@ const TAGS = {
   'poker-chip':           { strong: ['poker', 'casino'], weak: ['cards', 'bet', 'game night', 'vegas', 'chips'] },
   'pretzel':              { strong: ['pretzel'], weak: ['bakery', 'bread', 'dough', 'salt', 'baking', 'oven', 'loaf'] },
   'quartz-crystal':       { strong: ['quartz', 'crystal'], weak: ['gem', 'mineral', 'geode', 'museum', 'collection'] },
-  'river-rock':           { strong: ['pebble', 'river rock'], weak: ['rock', 'stone', 'river', 'stream', 'creek', 'brook', 'skipping', 'lake'] },
+  'river-rock':           { strong: ['pebble', 'river rock'], weak: ['rock', 'stone', 'river', 'stream', 'creek', 'brook', 'skipping', 'lake', 'still', 'water'] },
   'sand-dollar':          { strong: ['sand dollar'], weak: ['beach', 'sand', 'shore', 'tide', 'ocean'] },
   'seashell':             { strong: ['seashell', 'sea shell'], weak: ['shell', 'beach', 'ocean', 'sea', 'shore', 'holiday', 'coast'] },
   'snail-shell':          { strong: ['snail'], weak: ['slug', 'garden', 'after the rain', 'slow', 'damp'] },
   'starfish':             { strong: ['starfish', 'sea star'], weak: ['tide pool', 'ocean', 'beach', 'star'] },
   'strawberry':           { strong: ['strawberr'], weak: ['berries', 'picking', 'jam', 'shortcake', 'summer', 'garden'] },
   'thread':               { strong: ['thread', 'spool'], weak: ['sewing', 'needle', 'mending', 'knitting', 'stitch', 'grandmother'] },
-  'twig':                 { strong: ['twig'], weak: ['stick', 'branch', 'kindling', 'fetch', 'walk', 'forest', 'woods', 'tree'] },
+  'twig':                 { strong: ['twig'], weak: ['stick', 'branch', 'kindling', 'fetch', 'walk', 'forest', 'woods', 'tree', 'dog'] },
   'watermelon-slice':     { strong: ['watermelon'], weak: ['melon', 'picnic', 'barbecue', 'bbq', 'summer', 'seeds'] },
   'wishbone':             { strong: ['wishbone'], weak: ['thanksgiving', 'turkey', 'roast', 'luck', 'wish', 'dinner'] },
 };
+
+/**
+ * Objects that read as "the same kind of thing" at a glance. Two of these near
+ * each other is the repetition the spread rule is really guarding against --
+ * nobody notices a cookie beside a key, everybody notices a maple leaf beside
+ * an oak leaf. Anything not listed is its own family.
+ */
+const FAMILIES = {
+  leaf:   ['maple-leaf', 'oak-leaf'],
+  shore:  ['seashell', 'snail-shell', 'sand-dollar', 'starfish', 'coral', 'driftwood'],
+  sweet:  ['birthday-cake-slice', 'cupcake', 'donut', 'chocolate-chip-cookie', 'lollipop', 'gummy-bear', 'ice-cream-cone'],
+  fruit:  ['cherry', 'blueberry', 'strawberry', 'lemon', 'orange-slice', 'watermelon-slice'],
+  forest: ['twig', 'pinecone', 'acorn', 'chestnut'],
+  disc:   ['coin', 'poker-chip', 'button'],
+  bloom:  ['daisy', 'dandelion', 'four-leaf-clover'],
+  stone:  ['river-rock', 'quartz-crystal'],
+  bug:    ['ladybug', 'monarch-butterfly'],
+};
+const FAMILY_OF = new Map();
+for (const [family, ids] of Object.entries(FAMILIES)) for (const id of ids) FAMILY_OF.set(id, family);
 
 let catalogue = [];          // every usable item, in index order
 let byId = new Map();
 
 /**
- * Read the generated index once. Items without an entry in TAGS can still be
- * filler -- they simply never match a memory -- so adding a photograph to the
- * library is a one-line change and tagging it is optional.
+ * Read the generated index once. Items without an entry in TAGS never match a
+ * memory, so adding a photograph to the library is a one-line change and
+ * tagging it is what makes it reachable.
  */
 export async function loadItems() {
   if (catalogue.length) return catalogue;
@@ -95,7 +119,6 @@ export async function loadItems() {
 }
 
 export const itemById = (id) => byId.get(id) || null;
-export const itemCount = () => catalogue.length;
 
 // ------------------------------------------------------------- matching ---
 
@@ -109,62 +132,66 @@ function words(memory) {
 }
 
 /**
- * The object this memory is, or null if the library has nothing close.
- *
- * `used` lets the caller keep the page varied: among candidates that tie at the
- * top score, one that is not already on the wall wins. Ties below that are
- * broken by the memory's own id, so a marble-or-cookie decision is the same on
- * every load and for every visitor -- the same promise the marble colours make.
+ * Rank every object this memory could be, best first. Empty means the library
+ * has nothing close and the memory stays a marble.
  */
-export function matchItem(memory, used = new Set()) {
+function candidates(memory) {
   const hay = words(memory);
-  if (!hay) return null;
-
-  let best = null;
-  let bestScore = 0;
+  if (!hay) return [];
+  const out = [];
   for (const item of catalogue) {
     if (!item.tags) continue;
     let score = 0;
     for (const t of item.tags.strong) if (hay.includes(t)) score += STRONG;
     for (const t of item.tags.weak) if (hay.includes(t)) score += WEAK;
-    if (score < THRESHOLD) continue;
-
-    // fresh beats repeated; then a stable coin-flip on the memory's own id
-    const fresher = !used.has(item.id) && used.has(best?.id);
-    const luckier = mulberry32(hashText(memory.id + item.id))() > 0.5;
-    if (score > bestScore || (score === bestScore && (fresher || (!used.has(item.id) === !used.has(best?.id) && luckier)))) {
-      best = item;
-      bestScore = score;
-    }
+    if (score >= THRESHOLD) out.push({ item, score });
   }
-  return best;
+  return out.sort((a, b) => b.score - a.score
+    || hashText(memory.id + a.item.id) - hashText(memory.id + b.item.id));
 }
 
-// --------------------------------------------------------------- filler ---
-
 /**
- * The object in a cell no memory took. Seeded by the cell's own coordinates
- * rather than by an index, so adding a memory in one corner does not reshuffle
- * the whole page underneath it.
+ * Give every memory on the page an object, or a marble if nothing fits.
  *
- * Filler lies at any angle and is inert in every sense -- no pointer, no focus,
- * no hover. What tells a memory apart from the junk is not what it is a picture
- * of, it is that it answers when you touch it.
+ * `spots` is the placed position of each memory, in page pixels and in the same
+ * order -- the whole point of doing this in one pass rather than per memory is
+ * that the choice depends on what is already lying nearby. Among candidates
+ * within `NEAR_SCORE` of the memory's best, the one that lands furthest from
+ * another copy of itself (and from its own family) wins, so a wall full of
+ * birthdays is still a wall you can hunt through.
+ *
+ * Returns an array of items-or-null, aligned with the input.
  */
-export function fillerItem(col, row, salt = 0) {
-  const rng = mulberry32(((col + 1) * 73856093) ^ ((row + 1) * 19349663) ^ (salt * 83492791));
-  const item = catalogue[Math.floor(rng() * catalogue.length)];
-  if (!item) return null;
-  return {
-    item,
-    turn: (rng() - 0.5) * 260,
-    // well under the cell on purpose: what is left over is the jitter, and
-    // without a decent margin the page snaps back into rows you can read
-    scale: 0.42 + rng() * 0.38,
-    jx: rng(),
-    jy: rng(),
-    flip: rng() < 0.5,
-  };
+const NEAR_SCORE = 1;
+const FAMILY_WEIGHT = 0.55;   // sharing a family is most of a clash, not all of it
+
+export function assignItems(memories, spots) {
+  const placed = [];   // { id, family, x, y }
+  return memories.map((memory, i) => {
+    const ranked = candidates(memory);
+    if (!ranked.length) return null;
+
+    const top = ranked[0].score;
+    const near = ranked.filter((c) => c.score >= top - NEAR_SCORE);
+    const here = spots[i] || { x: 0, y: 0 };
+
+    let best = near[0].item;
+    let bestRoom = -1;
+    for (const { item } of near) {
+      const family = FAMILY_OF.get(item.id) || item.id;
+      let room = Infinity;
+      for (const p of placed) {
+        const same = p.id === item.id ? 1 : p.family === family ? FAMILY_WEIGHT : 0;
+        if (!same) continue;
+        const d = Math.hypot(p.x - here.x, p.y - here.y) / same;
+        if (d < room) room = d;
+      }
+      if (room > bestRoom) { bestRoom = room; best = item; }
+    }
+
+    placed.push({ id: best.id, family: FAMILY_OF.get(best.id) || best.id, x: here.x, y: here.y });
+    return best;
+  });
 }
 
 // -------------------------------------------------------------- geometry ---

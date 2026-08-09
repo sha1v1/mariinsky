@@ -8,3 +8,8 @@ data/orbs/*.json
 # not checked in — 44 photographic cut-outs is a few megabytes of derived
 # artefact, and the originals live outside the repo
 public/images/items/
+# holds the fal.ai key for semantic layer decomposition. .env.example is the
+# committed one, and it is empty.
+.env
+
+~/.cache/

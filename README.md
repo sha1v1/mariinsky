@@ -24,10 +24,18 @@ and not checked in. Without it the page has nothing to lay out but marbles.
 
 **The collection** is a page out of an i-spy book, inside a printed blue border:
 paper white, flat, no drop shadows, nothing labelled, and nothing overlapping
-anything else. Mariinsky lies in the middle with the title printed across her
+anything else. Mariinsky loops in the middle with the title printed across her
 side, and the grid is cut around her so nothing is ever laid across the dog.
 Sweeping the cursor over a memory plays its own sound for exactly as long as you
 stay on it, and its title wraps itself around it.
+
+She is a video (`public/video/mariinsky.mp4`) rather than a still. MP4 carries
+no alpha, so the clip's flat white is taken out at paint time by
+`mix-blend-mode: multiply` — multiplying by white leaves the backdrop untouched,
+which is what "no background" means on paper this pale. That is also why the
+paper lives on `.page` rather than only on the fixed `.paper` layer, and why
+`.hero` is centred by margins instead of a transform: a transform would make it
+a stacking context, and a stacking context isolates blending.
 
 A memory **is an object**, chosen by what it says: "the smell of bakery bread"
 is a pretzel, "my sister's birthday" is a slice of cake. When nothing in the
@@ -35,16 +43,25 @@ library is close it stays a marble — which is not a failure state, it is what 
 memory looks like before it has told you enough to be a picture of anything.
 Matching is a keyword table in `items.js`, not a model: it runs on the wall
 payload with no network call, it is inspectable, and a wrong match is a wrong
-picture rather than a wrong memory.
+picture rather than a wrong memory. On top of the score sits a **spread** rule,
+which matters more the fuller the wall gets: among candidates within a point of
+the best score, the one that lands furthest from another copy of itself — and
+from anything in the same family, so two kinds of leaf never end up side by side
+— wins. A hundred memories mentioning a birthday would otherwise be a hundred
+identical slices of cake.
 
-Most of what is on the page is **not** a memory. Every cell a memory did not
-take gets a trinket out of the same library, so the page is full at any wall
-size. That is not decoration for its own sake: a hunt needs something to hunt
-through, and eleven objects alone on white paper is a dashboard, not a spread.
-Trinkets are inert — no pointer, no focus, no hover, not in the tab order — and
-that, rather than what they are pictures of, is what tells them apart. A memory
-answers when you touch it. Making the junk look different from the memories
-would not be a hunt, it would be a spot-the-odd-one-out.
+**Everything on the page is a memory.** There used to be inert filler in the
+cells the memories did not take, to keep the spread dense; it is gone. A page
+where half the things do not answer teaches you to stop touching things, and the
+wall is about to be fed from a real database rather than from eleven seeds.
+Density comes from the grid instead: it is sized to the wall, so a small wall is
+a few large objects rather than a few small ones adrift in white.
+
+Every object is turned and sized at random inside a range, seeded by its own id
+— so the page looks scattered rather than tiled, and is identical on every load
+and to every visitor. Neither is tied to anything about the memory: an i-spy
+page is a jumble of things that happen to be different sizes, and a page where
+size meant something would be a chart.
 
 The page is sized to the **window** first: rows and columns are chosen so a wall
 that fits lands inside one screen exactly, margins included, and nothing is
@@ -53,12 +70,19 @@ has cells does the page grow past the window and become something you drag.
 Panning is what you do when there is too much to fit, not the resting state of a
 page with eleven things on it.
 
-**Inside a memory** is the opposite: the page frosts over and one sphere rises
-out of the marble you clicked, lit by a gradient built from its own photographs
-(or, if it is only words, from the mood those words were read as). It is always
-dead centre, at every window size. There is no back button and no controls —
-click anywhere outside it. Its own sound comes up over the collection while it
+**Inside a memory** is the opposite: the paper drops away entirely and one
+sphere rises out of the marble you clicked, lit by a gradient built from its own
+photographs (or, if it is only words, from the mood those words were read as).
+It takes the whole screen. Its own sound comes up over the collection while it
 is open.
+
+The controls in there are quiet rather than absent. A back button, the contents
+of the memory, the laboratory, sound, and *open it again* sit at the top; every
+version this memory has ever had sits along the bottom, and clicking one plays
+it back without appending anything. All of it fades out a few seconds after you
+stop moving and returns the moment you move again, so the memory is
+uninterrupted while you are watching it and fully operable the instant you want
+something. Escape still leaves, and so does clicking the margin.
 
 **Leaving a memory** uses the same door: a card over the frosted collection,
 dismissed by clicking outside it. Backing out of writing costs exactly as little
@@ -180,9 +204,8 @@ uploads/<id>/            the original files
 public/js/
   app.js                 router, the two overlays, the deferred-contribution queue
   garden.js              the scatter, hover previews, the landing animation
-  items.js               memory text -> which object it is; the filler pool; fitting
-  trinkets.js            the rest of the i-spy page
-  mascot.js              Mariinsky, and the four clocks she moves on
+  items.js               memory text -> which object it is, kept spread out
+  mascot.js              Mariinsky's loop, and the thought bubble
   contribute.js          write / say / draw / show — the under-a-minute flow
   orbview.js             the sphere: the modal shell over both replay modes
   marble.js              colour inheritance and physical traits  (also imported by the server)
@@ -211,10 +234,17 @@ renderer inside this app's modal shell.
 
 The collection is a shared wall, so it needs a **persistent filesystem** for
 `data/orbs` and `uploads`. Vercel and other ephemeral-filesystem hosts will lose
-every contribution on redeploy — use Render, Railway, or Fly with a volume
-mounted at the project root.
+every contribution on redeploy — and, with no long-lived process to listen, will
+not run the API at all. Use Render, Railway, or Fly with a real volume.
 
-- `PORT` — defaults to 5173.
+`render.yaml` is committed and does this on Render: one web service, one 10GB
+disk mounted at `/var/mariinsky`, `DATA_DIR` pointed at the mount. Push the repo
+and pick *New → Blueprint*; set `FAL_KEY` and `MODERATION_KEY` in the dashboard.
+
+- `DATA_DIR` — the root that `data/orbs` and `uploads` hang off. Defaults to the
+  project directory, which is what you want locally. Set it to the mount path
+  when deploying, since a host disk mounts at one place and these are two trees.
+- `PORT` — defaults to 5173. Hosts that inject their own `PORT` just work.
 - `MODERATION_KEY` — set this to enable `DELETE /api/orbs/:id` via the
   `x-moderation-key` header. Without it, deletion is refused entirely: a shared
   wall should not let whoever is looking at a memory remove it.
@@ -238,6 +268,9 @@ memory that reported itself gone.
 | `GET /api/orbs/:id` | one memory in full, including every past version |
 | `POST /api/orbs/:id/versions` | begin a version — a collage arrangement, or a sequence seed |
 | `PATCH`/`POST /api/orbs/:id/versions/:n` | the write-back: beats watched, what was seen, strain left behind. POST as well as PATCH because `sendBeacon` is always a POST |
+| `PUT /api/orbs/:id/settings` | the laboratory's recipe: how this memory composes itself from now on |
+| `POST /api/orbs/:id/decompose` | cut a photograph into semantic layers with Qwen-Image-Layered, via fal. Needs `FAL_KEY`; answers 503 with the manual route if it is unset |
+| `POST /api/orbs/:id/layers` | the keyless way to the same place: layer PNGs cut elsewhere, uploaded by hand |
 
 ---
 
@@ -250,8 +283,12 @@ memory that reported itself gone.
   what people actually leave here.
 - Contributions are not rate-limited or moderated. A public wall on the open
   internet will need both.
-- The laboratory (the prototype's per-memory tuning bench) was not brought
-  across. Every memory runs the schema defaults, and the plumbing for per-memory
-  recipes is already in place — `settings` on the record, `PUT` route absent.
+- The laboratory writes to a *shared* wall. A recipe is a property of the memory
+  rather than of whoever tuned it, so saving one changes how that memory comes
+  back for everybody — the same bargain as the decay, but nothing marks it as
+  such in the interface, and there is no moderation on it.
+- Semantic decomposition is pay-per-use on somebody else's GPU. `FAL_KEY` lives
+  in `.env` (gitignored; `.env.example` is the committed, empty one), and the
+  bench offers the free manual route when no key is set.
 - `uploads/` ships with one small sample memory. The two video-heavy samples
   from the orb prototype were left out — they were 119 MB.

@@ -1,11 +1,19 @@
 // Inside one memory.
 //
-// The shell is the collection's: a sphere that grows out of the marble you
-// clicked, dead centre at every window size, with the page frosted behind it
-// and no back button -- anywhere outside closes it.
+// The collection is a bright page you look *at*. A memory is somewhere you go
+// *into*: the paper drops away entirely, the sphere takes the screen, and the
+// room goes dark around it. That is the whole reason this is not a card over
+// the wall any more -- a preview kept the page in your eye, and a memory coming
+// apart deserves your whole eye.
 //
-// What happens *inside* the sphere is the orb prototype's engine, and it gives
-// a memory back in one of two ways, chosen by the memory's own recipe:
+// The controls exist, but they are quiet. Everything except the sphere fades
+// out a few seconds after you stop moving, and comes back the moment you do.
+// So the memory is uninterrupted while you are watching it and fully operable
+// the instant you want something -- rather than the older bargain, where there
+// were no controls at all and the only thing you could do was leave.
+//
+// What happens inside the sphere is the orb engine, and it gives a memory back
+// in one of two ways, chosen by the memory's own recipe:
 //
 //   sequence  one thing at a time, running until you leave   (sequence.js)
 //   collage   one arrangement, everything at once, held still (compose.js)
@@ -21,6 +29,16 @@ import { StreamPlayer } from './stream.js';
 import { get } from './settings.js';
 import { r3 } from './rng.js';
 import { EMOTION_HUE } from './emotion.js';
+
+const KIND_LABEL = {
+  imageLayer: 'image layer',
+  videoPortion: 'video portion',
+  textFragment: 'text fragment',
+  audioWindow: 'audio window',
+};
+
+/** How long the chrome waits, after you stop moving, before it gets out of the way. */
+const CALM_AFTER = 2800;
 
 export class OrbView {
   constructor(root, audio, scape, session) {
@@ -45,13 +63,13 @@ export class OrbView {
     // The collection keeps playing underneath, but this memory sits on top of
     // it -- pulled down far enough that its own sound is clearly the loudest
     // thing in the room, not so far that the room disappears.
-    this.scape.duck(0.34, 1.2);
+    this.scape?.duck(0.34, 1.2);
 
     this.shell();
 
     // Visiting a memory is what puts it into the shared audioscape. It swells
     // in the collection when you come back out.
-    if (this.orb.analysis) this.session.queue(this.orb.analysis, this.orb.title);
+    if (this.orb.analysis) this.session?.queue(this.orb.analysis, this.orb.title);
 
     if (this.mode === 'sequence') return this.openStream();
     const version = composeVersion(this.orb, this.settings);
@@ -67,31 +85,59 @@ export class OrbView {
     const o = this.orb;
     const g = orbGradient(o);
     this.root.innerHTML = `
-      <div class="orbmodal" data-role="modal" style="--glow:${o.marble || o.glow};--g1:${g[0]};--g2:${g[1]};--g3:${g[2]}">
-        <div class="orbscrim" data-role="scrim"></div>
-        <div class="orbstage" data-role="stage">
-          <div class="sphere" data-role="sphere">
-            <div class="collage" data-role="collage"></div>
-            <div class="grain"></div>
-            <div class="glass"></div>
-            <div class="rim"></div>
+      <!-- the chrome is lit by the same colour as the glass (g1), not by the
+           marble the memory wears out on the wall: in here the sphere is the
+           only light source, and a second accent beside it reads as a mistake -->
+      <div class="orbscene" data-role="scene" style="--glow:${g[0]};--g1:${g[0]};--g2:${g[1]};--g3:${g[2]}">
+        <div class="orbveil" data-role="veil"></div>
+
+        <header class="hud">
+          <button class="hudbtn" data-act="back">← the collection</button>
+          <div class="hud-actions">
+            <button class="hudbtn" data-act="reveal" title="what is here and what is gone">contents</button>
+            <button class="hudbtn" data-act="lab" title="dial in how this memory replays">laboratory</button>
+            <button class="hudbtn" data-act="mute" aria-pressed="false">sound on</button>
+            <button class="hudbtn hudbtn-solid" data-act="again">open it again</button>
           </div>
-          <div class="orb-caption">
-            <h2 class="orb-title">${esc(o.title)}</h2>
+        </header>
+
+        <div class="stagewrap">
+          <div class="orbstage" data-role="stage">
+            <div class="sphere" data-role="sphere">
+              <div class="collage" data-role="collage"></div>
+              <div class="grain"></div>
+              <div class="glass"></div>
+              <div class="rim"></div>
+            </div>
+            <div class="orb-caption">
+              <h2 class="orb-title">${esc(o.title)}</h2>
+            </div>
           </div>
+          <aside class="reveal" data-role="reveal" hidden></aside>
         </div>
+
+        <footer class="timeline">
+          <div class="tl-label">every version of this memory</div>
+          <div class="tl-strip" data-role="strip"></div>
+        </footer>
       </div>`;
 
-    this.modal = this.root.querySelector('[data-role=modal]');
+    this.scene = this.root.querySelector('[data-role=scene]');
     this.stage = this.root.querySelector('[data-role=stage]');
     this.sphere = this.root.querySelector('[data-role=sphere]');
     this.collage = this.root.querySelector('[data-role=collage]');
+    this.strip = this.root.querySelector('[data-role=strip]');
+    this.revealEl = this.root.querySelector('[data-role=reveal]');
 
-    // There is no back button: anywhere outside the orb closes it.
-    this.root.querySelector('[data-role=scrim]').addEventListener('click', () => this.dismiss());
-    this.modal.addEventListener('click', (e) => {
-      if (e.target === this.modal || e.target === this.stage) this.dismiss();
-    });
+    // Delegated from the scene, not from the root: the root outlives this view,
+    // so a listener left on it would still be answering clicks from inside the
+    // next memory you open -- one "open it again" would count as two.
+    this.scene.addEventListener('click', (e) => this.onClick(e));
+
+    // Leaving. The veil is the only empty space that dismisses, because in here
+    // the sphere fills the screen and a stray click on the backdrop is far more
+    // likely to be a miss than a decision.
+    this.root.querySelector('[data-role=veil]').addEventListener('click', () => this.dismiss());
     this.onKey = (e) => { if (e.key === 'Escape') this.dismiss(); };
     document.addEventListener('keydown', this.onKey);
 
@@ -105,8 +151,52 @@ export class OrbView {
       this.sphere.style.setProperty('--my', 0);
     });
 
+    this.quietChrome();
+    this.drawTimeline();
     this.growFrom(window.__fromRect);
     this.pulse();
+  }
+
+  /**
+   * The chrome is present but not insistent: it settles out of the way while
+   * you are just watching, and any movement -- or any keyboard focus, which is
+   * the same intent expressed without a pointer -- brings it straight back.
+   * Hovering the controls themselves pins them, so nothing dissolves from under
+   * the cursor on its way to being clicked.
+   */
+  quietChrome() {
+    const rouse = () => {
+      this.scene.classList.remove('calm');
+      clearTimeout(this.calmTimer);
+      this.calmTimer = setTimeout(() => {
+        if (!this.scene?.isConnected || this.chromePinned) return;
+        this.scene.classList.add('calm');
+      }, CALM_AFTER);
+    };
+    this.scene.addEventListener('pointermove', rouse, { passive: true });
+    this.scene.addEventListener('focusin', rouse);
+    // `chromePinned`, not `pinned`: the laboratory subclasses this view and
+    // already means something quite different by a pin -- holding the seed.
+    for (const bar of this.scene.querySelectorAll('.hud, .timeline, .reveal')) {
+      bar.addEventListener('pointerenter', () => { this.chromePinned = true; rouse(); });
+      bar.addEventListener('pointerleave', () => { this.chromePinned = false; rouse(); });
+    }
+    rouse();
+  }
+
+  onClick(e) {
+    const act = e.target.closest('[data-act]')?.dataset.act;
+    if (act === 'back') return this.dismiss();
+    if (act === 'lab') { location.hash = `#/lab/${this.orb.id}`; return; }
+    if (act === 'again') return this.again();
+    if (act === 'reveal') return this.toggleReveal();
+    if (act === 'mute') {
+      const btn = e.target.closest('[data-act=mute]');
+      const next = !this.audio.muted;
+      this.audio.setMuted(next);
+      btn.textContent = next ? 'sound off' : 'sound on';
+      btn.setAttribute('aria-pressed', String(next));
+    }
   }
 
   /** The marble you clicked becomes the orb: grow out of exactly where it was. */
@@ -155,6 +245,7 @@ export class OrbView {
   async openStream(opts = {}) {
     this.stopStream();
     this.stopVideos();
+    this.replaying = !!opts.replay;
     const stream = makeStream(this.orb, this.settings, opts);
     this.stream = stream;
     this.seen = new Set();
@@ -170,7 +261,10 @@ export class OrbView {
       seen: [],
     };
     this.version = version;
-    await this.persist(version);
+    // Watching an old version back is looking at a record of a sitting, not a
+    // new sitting: it must not append a version, and must not cost the memory.
+    if (!opts.replay) await this.persist(version);
+    else { version.n = opts.n ?? '—'; this.drawTimeline(); }
 
     this.player = new StreamPlayer({
       stage: this.collage,
@@ -187,6 +281,7 @@ export class OrbView {
       this.sphere?.classList.add('flashing');
       setTimeout(() => this.sphere?.classList.remove('flashing'), 2600 / this.player.speed);
     }
+    if (this.revealEl && !this.revealEl.hidden) this.drawReveal();
   }
 
   /**
@@ -195,7 +290,7 @@ export class OrbView {
    * into it for good.
    */
   async flush() {
-    if (!this.player || !this.stream || this.version?.mode !== 'seq') return;
+    if (!this.player || !this.stream || this.version?.mode !== 'seq' || this.replaying) return;
     const i = this.player.watched;
     const body = JSON.stringify({
       beats: i,
@@ -231,11 +326,30 @@ export class OrbView {
     version.at = meta.at;
     this.orb.versions.push(version);
     this.orb.decay = meta.decay;
+    this.drawTimeline();
   }
 
-  async show(version) {
+  /** Ask the memory for a fresh version, which is what wears it down. */
+  async again() {
+    this.replaying = false;
+    if (this.mode === 'sequence') {
+      await this.flush();
+      return this.openStream();
+    }
+    const version = composeVersion(this.orb, this.settings);
+    await this.show(version);
+    await this.persist(version);
+  }
+
+  async show(version, { replay = false } = {}) {
+    // A stored sequence is a seed, not an arrangement: replaying it means
+    // running the same generator again from beat zero.
+    if (version.mode === 'seq') {
+      return this.openStream({ seed: version.seed, decay: version.decay, replay, n: version.n });
+    }
     const token = ++this.token;
     this.version = version;
+    this.replaying = replay;
     this.stopStream();
     this.stopVideos();
     this.collage.innerHTML = '';
@@ -277,6 +391,8 @@ export class OrbView {
     if (token !== this.token) return;
     trimLayerCache();
     this.audio.play(this.orb, version, this.settings).catch(() => {});
+    this.drawTimeline();
+    if (this.revealEl && !this.revealEl.hidden) this.drawReveal();
   }
 
   plateEl(plate, size, version) {
@@ -401,10 +517,70 @@ export class OrbView {
     this.timers = [];
   }
 
+  // ------------------------------------------------------------- the past ---
+
+  /**
+   * Every opening this memory has had, oldest first, each chip carrying how
+   * faded that version already was. Clicking one plays it back without
+   * appending anything: the history is readable, not re-livable.
+   */
+  drawTimeline() {
+    if (!this.strip) return;   // the laboratory has no history to draw
+    const versions = this.orb.versions;
+    if (!versions.length) {
+      this.strip.innerHTML = '<span class="tl-empty">this is the first time anyone has opened it</span>';
+      return;
+    }
+    this.strip.innerHTML = versions
+      .map((v) => {
+        const active = this.version && v.n === this.version.n;
+        return `<button class="chip${active ? ' active' : ''}${v.flash ? ' flash' : ''}" data-v="${v.n}" title="${new Date(v.at).toLocaleString()}">
+          <span class="chip-n">${v.n}</span>
+          <span class="chip-bar"><i style="width:${Math.round(v.decay * 100)}%"></i></span>
+        </button>`;
+      })
+      .join('');
+    this.strip.onclick = (e) => {
+      const n = e.target.closest('[data-v]')?.dataset.v;
+      if (!n) return;
+      const v = this.orb.versions.find((x) => x.n === Number(n));
+      if (v) this.show(v, { replay: true });
+    };
+    this.strip.scrollLeft = this.strip.scrollWidth;
+  }
+
+  toggleReveal() {
+    this.revealEl.hidden = !this.revealEl.hidden;
+    // The laboratory reuses this panel without a scene around it.
+    this.scene?.classList.toggle('revealing', !this.revealEl.hidden);
+    if (!this.revealEl.hidden) this.drawReveal();
+  }
+
+  drawReveal() {
+    // Mid-sequence "here" means "shown to you so far", which grows as you watch.
+    const here = this.player ? this.seen : idsOf(this.version);
+    const groups = new Map();
+    for (const [id, c] of Object.entries(this.orb.components)) {
+      const key = KIND_LABEL[c.kind] || c.kind;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push({ id, c, here: here.has(id) });
+    }
+    this.revealEl.innerHTML = [...groups]
+      .map(([kind, items]) => {
+        const rows = items
+          .map((it) => `<li class="${it.here ? 'here' : 'gone'}">${esc(labelFor(it.c))}</li>`)
+          .join('');
+        const n = items.filter((i) => i.here).length;
+        return `<section><h3>${kind}s <em>${n}/${items.length}</em></h3><ul>${rows}</ul></section>`;
+      })
+      .join('');
+  }
+
   /** Leaving the memory entirely: hand back what the sitting cost it. */
   close() {
     this.flush();
     cancelAnimationFrame(this.raf);
+    clearTimeout(this.calmTimer);
     this.stopStream();
     this.stopVideos();
     document.removeEventListener('keydown', this.onKey);
@@ -427,7 +603,7 @@ export function beatIds(b) {
  * it. If it is only words, the gradient comes from the mood those words were
  * read as instead.
  */
-function orbGradient(orb) {
+export function orbGradient(orb) {
   const cols = [];
   for (const src of Object.values(orb.sources)) {
     for (const c of (src.analysis?.palette || []).slice(0, 2)) {
@@ -443,6 +619,11 @@ function orbGradient(orb) {
     `hsl(${(hue + 38) % 360} 55% 48%)`,
     `hsl(${(hue + 330) % 360} 48% 40%)`,
   ];
+}
+
+function labelFor(c) {
+  if (c.kind === 'textFragment') return `“${c.text.slice(0, 46)}${c.text.length > 46 ? '…' : ''}”`;
+  return c.name || c.kind;
 }
 
 /** Blur and saturation share one property, so they have to be built together. */

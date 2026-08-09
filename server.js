@@ -11,8 +11,14 @@ import { marbleColor } from './public/js/marble.js';
 
 const run = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ORBS = path.join(__dirname, 'data', 'orbs');
-const UPLOADS = path.join(__dirname, 'uploads');
+// The wall is the only thing here that has to survive a restart. Locally that
+// is just the repo; on a host it is one mounted disk, so both trees hang off a
+// single configurable root rather than two top-level directories.
+const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : __dirname;
+const ORBS = path.join(DATA_DIR, 'data', 'orbs');
+const UPLOADS = path.join(DATA_DIR, 'uploads');
 const PREP = path.join(UPLOADS, '_prep');
 fs.mkdirSync(ORBS, { recursive: true });
 fs.mkdirSync(PREP, { recursive: true });
@@ -413,6 +419,195 @@ async function writeBack(req, res) {
 
 const clamp01 = (v) => Math.max(0, Math.min(0.94, v));
 
+// ------------------------------------------------------------ the recipe ---
+
+/**
+ * The laboratory saves its recipe here. Settings never touch the version
+ * history -- they are how the *next* opening gets composed, not a record of a
+ * past one.
+ *
+ * Note what this means on a shared wall: a recipe is a property of the memory,
+ * not of the person tuning it, so saving one changes how that memory comes back
+ * for everybody. That is the same bargain as the decay itself.
+ */
+app.put('/api/orbs/:id/settings', async (req, res) => {
+  const s = req.body?.settings;
+  if (!s || typeof s !== 'object') return res.status(400).json({ error: 'malformed settings' });
+  await withOrb(req.params.id, async () => {
+    const orb = await readOrb(req.params.id);
+    if (!orb) return res.status(404).json({ error: 'no such orb' });
+    orb.settings = s;
+    await writeOrb(orb);
+    res.json({ ok: true });
+  });
+});
+
+// -------------------------------------------------- semantic decomposition --
+//
+// Qwen-Image-Layered splits one flat photo into complete RGBA layers -- subject,
+// background, individual objects -- and paints back in whatever each layer was
+// hiding, so every layer stands on its own. That is a different thing from the
+// tonal/chroma/shard layers this app measures for itself: those cut by
+// distribution, these cut by meaning.
+//
+// It is a 20B model, so it runs on somebody else's GPU. fal hosts it behind a
+// queue: submit, poll, collect. The image goes over as a data URI, already
+// scaled to the model's own working resolution by the browser, which saves an
+// upload round-trip and keeps this route dependency-free.
+const FAL_KEY = process.env.FAL_KEY || '';
+const FAL_MODEL = process.env.FAL_MODEL || 'fal-ai/qwen-image-layered';
+const FAL_BASE = process.env.FAL_BASE || 'https://queue.fal.run';
+
+const falHeaders = () => ({ Authorization: `Key ${FAL_KEY}`, 'content-type': 'application/json' });
+
+async function falDecompose({ dataUrl, layers, seed, onStatus }) {
+  const submit = await fetch(`${FAL_BASE}/${FAL_MODEL}`, {
+    method: 'POST',
+    headers: falHeaders(),
+    body: JSON.stringify({
+      image_url: dataUrl,
+      num_layers: layers,
+      output_format: 'png',
+      ...(seed != null ? { seed } : {}),
+    }),
+  });
+  const queued = await submit.json().catch(() => ({}));
+  if (!submit.ok) {
+    throw new Error(`fal rejected the request (${submit.status}): ${JSON.stringify(queued).slice(0, 400)}`);
+  }
+
+  const statusUrl = queued.status_url || `${FAL_BASE}/${FAL_MODEL}/requests/${queued.request_id}/status`;
+  const responseUrl = queued.response_url || `${FAL_BASE}/${FAL_MODEL}/requests/${queued.request_id}`;
+
+  // Decomposition is tens of seconds, and a cold queue can be minutes.
+  const deadline = Date.now() + 8 * 60 * 1000;
+  let status = queued.status;
+  while (status !== 'COMPLETED') {
+    if (Date.now() > deadline) throw new Error('fal did not finish within eight minutes');
+    await new Promise((r) => setTimeout(r, 2500));
+    const s = await fetch(statusUrl, { headers: falHeaders() });
+    const body = await s.json().catch(() => ({}));
+    status = body.status;
+    if (status === 'FAILED' || body.error) {
+      throw new Error(`fal failed: ${JSON.stringify(body.error || body).slice(0, 400)}`);
+    }
+    onStatus?.(status, body.queue_position);
+  }
+
+  const done = await fetch(responseUrl, { headers: falHeaders() });
+  const result = await done.json().catch(() => ({}));
+  if (!done.ok) throw new Error(`fal result unreadable (${done.status})`);
+  const images = result.images || result.layers || [];
+  if (!images.length) throw new Error('fal returned no layers');
+  return images;
+}
+
+app.post('/api/orbs/:id/decompose', async (req, res) => {
+  if (!FAL_KEY) {
+    return res.status(503).json({
+      error: 'no FAL_KEY set. Put your fal.ai key in a .env or export it before npm start, ' +
+             'or use the manual route: run the image through the free Hugging Face Space and upload the layer PNGs.',
+    });
+  }
+  const { sid, dataUrl, layers } = req.body || {};
+  const n = Math.min(8, Math.max(2, Number(layers) || 4));
+  if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) {
+    return res.status(400).json({ error: 'expected a data: image URL' });
+  }
+
+  const orb = await readOrb(req.params.id);
+  if (!orb) return res.status(404).json({ error: 'no such orb' });
+  if (orb.sources[sid]?.kind !== 'image') return res.status(400).json({ error: 'no such image source' });
+
+  let images;
+  try {
+    images = await falDecompose({ dataUrl, layers: n });
+  } catch (err) {
+    console.error('decompose failed', err);
+    return res.status(502).json({ error: String(err.message || err) });
+  }
+
+  // Pull the layers down to sit beside the original. Layer order is the model's
+  // own: index 0 is furthest back.
+  const dir = path.join(UPLOADS, orb.id, 'qwen');
+  await fsp.mkdir(dir, { recursive: true });
+  const added = {};
+  for (let i = 0; i < images.length; i++) {
+    const url = images[i]?.url;
+    if (!url) continue;
+    const got = await fetch(url);
+    if (!got.ok) continue;
+    const name = `${sid}-${i}.png`;
+    await fsp.writeFile(path.join(dir, name), Buffer.from(await got.arrayBuffer()));
+    added[`${sid}::q${i}`] = {
+      kind: 'imageLayer',
+      src: sid,
+      mode: 'rgba',
+      set: 'semantic',
+      url: `/files/${orb.id}/qwen/${name}`,
+      z: i,
+      name: i === 0 ? 'what was behind it all' : `a thing in it (${i})`,
+      hint: 'normal',
+    };
+  }
+  if (!Object.keys(added).length) return res.status(502).json({ error: 'no layers could be saved' });
+
+  await withOrb(orb.id, async () => {
+    const fresh = await readOrb(orb.id);
+    if (!fresh) return res.status(404).json({ error: 'no such orb' });
+    Object.assign(fresh.components, added);
+    await writeOrb(fresh);
+    res.json({ added: Object.keys(added).length, components: added });
+  });
+});
+
+/**
+ * The keyless route to the same place: run the photo through the free Hugging
+ * Face Space yourself, then hand the layer PNGs over here. Order is filename
+ * order, which is the order the Space exports them in -- back to front.
+ */
+const layerUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 40 * 1024 * 1024, files: 12 },
+});
+
+app.post('/api/orbs/:id/layers', layerUpload.array('files'), async (req, res) => {
+  const orb = await readOrb(req.params.id);
+  if (!orb) return res.status(404).json({ error: 'no such orb' });
+  const sid = req.body?.sid;
+  if (orb.sources[sid]?.kind !== 'image') return res.status(400).json({ error: 'no such image source' });
+  const files = (req.files || []).filter((f) => /png|webp/i.test(f.mimetype));
+  if (!files.length) return res.status(400).json({ error: 'expected transparent PNGs' });
+
+  const dir = path.join(UPLOADS, orb.id, 'qwen');
+  await fsp.mkdir(dir, { recursive: true });
+  files.sort((a, b) => a.originalname.localeCompare(b.originalname, undefined, { numeric: true }));
+
+  const added = {};
+  // Offset by whatever is already there, so a second import extends rather
+  // than silently overwriting the first.
+  const base = Object.keys(orb.components).filter((k) => k.startsWith(`${sid}::q`)).length;
+  for (let i = 0; i < files.length; i++) {
+    const name = `${sid}-m${base + i}.png`;
+    await fsp.writeFile(path.join(dir, name), files[i].buffer);
+    added[`${sid}::q${base + i}`] = {
+      kind: 'imageLayer', src: sid, mode: 'rgba', set: 'semantic',
+      url: `/files/${orb.id}/qwen/${name}`,
+      z: base + i,
+      name: files[i].originalname.replace(/\.[^.]+$/, ''),
+      hint: 'normal',
+    };
+  }
+
+  await withOrb(orb.id, async () => {
+    const fresh = await readOrb(orb.id);
+    if (!fresh) return res.status(404).json({ error: 'no such orb' });
+    Object.assign(fresh.components, added);
+    await writeOrb(fresh);
+    res.json({ added: Object.keys(added).length, components: added });
+  });
+});
+
 // The garden is a shared wall, so a memory can only be pulled out of it with
 // the moderation key -- not by whoever happens to be looking at it.
 app.delete('/api/orbs/:id', async (req, res) => {
@@ -440,5 +635,6 @@ sweepPrep();
 const PORT = process.env.PORT || 5173;
 app.listen(PORT, () => {
   console.log(`\n  mariinsky  →  http://localhost:${PORT}`);
+  console.log(`  wall storage: ${DATA_DIR}`);
   console.log(`  ffmpeg fallback: ${FFMPEG || 'not installed (undecodable files will be skipped)'}\n`);
 });
