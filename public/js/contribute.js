@@ -1,26 +1,18 @@
-// Adding to the wall. The whole thing is built around one constraint: a
-// stranger should be able to finish it in under a minute without being told
-// what to do. So there is one choice (how you want to leave it), one input, and
-// one button -- and the panel underneath shows, in plain words, exactly what
-// the site is about to do with what you gave it.
+// Adding to the wall. Two fields: what you want to say, and whatever you have
+// of it. There is no mode to pick first and no limit on how much goes in --
+// text, photos, clips and recordings all arrive through the same door, and the
+// only instruction either field gets is its own label.
 //
-// It opens the same way a memory does: a card over the frosted collection, with
-// the page still visible behind it, and clicking outside is how you leave. That
-// is deliberate -- backing out of leaving a memory should cost exactly as
-// little as backing out of reading one, and nothing is created on the way out.
+// It opens the way a memory does: the whole screen, over the frosted
+// collection, with clicking outside as the way back. That is deliberate --
+// backing out of leaving a memory should cost exactly as little as backing out
+// of reading one, and nothing is created on the way out.
 
 import { mulberry32, seed32 } from './rng.js';
 import { loadImageFile, analyzeImage, mediaMeta, probeAudio, splitText, hslToHex } from './analyze.js';
 import { imageComponents, videoComponents, audioComponents, textComponents } from './components.js';
-import { defaults as defaultSettings } from './settings.js';
+import { defaults as defaultSettings, DEV } from './settings.js';
 import { analyzeMemory, explain, EMOTION_HUE } from './emotion.js';
-
-const WAYS = [
-  { id: 'write', label: 'write it', hint: 'a few words', icon: iconPen() },
-  { id: 'speak', label: 'say it', hint: '15 seconds', icon: iconMic() },
-  { id: 'draw',  label: 'draw it', hint: 'one scribble', icon: iconScribble() },
-  { id: 'photo', label: 'show it', hint: 'a photo or clip', icon: iconFrame() },
-];
 
 export class Contribute {
   constructor(root, scape, session, { onLanded } = {}) {
@@ -28,58 +20,81 @@ export class Contribute {
     this.scape = scape;
     this.session = session;
     this.onLanded = onLanded;
-    this.way = 'write';
-    this.files = [];
+    this.items = [];
     this.words = '';
-    this.recorder = null;
-    this.recTimer = null;
-    this.recSeconds = 0;
   }
 
   open() {
     this.root.innerHTML = `
-      <div class="addmodal" data-role="modal">
-        <div class="orbscrim" data-role="scrim"></div>
-        <div class="addcard" data-role="card" role="dialog" aria-modal="true" aria-label="leave one moment">
-          <div class="add-head">
-            <h2>leave one moment.</h2>
-            <p>it does not have to be a good one, or explained.</p>
+      <div class="addscene" data-role="modal">
+        <div class="addveil" data-role="scrim"></div>
+        <div class="addorb" data-role="card" role="dialog" aria-modal="true" aria-label="leave one moment">
+          <div class="addfield">
+            <label for="words">what do you remember?</label>
+            <textarea class="addtext" id="words" rows="5"></textarea>
           </div>
-          <div class="ways" role="tablist">
-            ${WAYS.map((w) => `
-              <button class="way${w.id === this.way ? ' on' : ''}" role="tab" data-way="${w.id}" aria-selected="${w.id === this.way}">
-                ${w.icon}<b>${w.label}</b><span>${w.hint}</span>
-              </button>`).join('')}
+          <div class="addfield">
+            <label id="medialabel">add pictures, videos, and audio</label>
+            <button class="adddrop" data-role="drop" aria-describedby="medialabel">press / drag</button>
+            <input type="file" data-role="file" multiple accept="image/*,video/*,audio/*" hidden>
+            <div class="addtray" data-role="tray" hidden>
+              <ul data-role="staged"></ul>
+              <button class="traymore" data-role="more" aria-label="show the rest" hidden>${iconArrow()}</button>
+            </div>
           </div>
-          <div data-role="stage"></div>
-          <div class="reading" data-role="reading"></div>
-          <div class="add-actions">
-            <button class="btn btn-solid" data-role="commit">put it on the wall</button>
-            <button class="btn" data-role="cancel">not now</button>
-            <span class="status" data-role="status"></span>
+          ${DEV ? '<div class="reading" data-role="reading"></div>' : ''}
+          <div class="addfoot">
+            <button class="addquiet" data-role="cancel">cancel</button>
+            <span class="status" data-role="status" role="status"></span>
+            <button class="btn btn-solid" data-role="commit">continue</button>
           </div>
         </div>
       </div>`;
 
     this.modal = this.root.querySelector('[data-role=modal]');
     this.card = this.root.querySelector('[data-role=card]');
-    this.stage = this.root.querySelector('[data-role=stage]');
+    this.trayEl = this.root.querySelector('[data-role=tray]');
+    this.stagedEl = this.root.querySelector('[data-role=staged]');
+    this.moreEl = this.root.querySelector('[data-role=more]');
     this.readingEl = this.root.querySelector('[data-role=reading]');
     this.statusEl = this.root.querySelector('[data-role=status]');
 
-    this.root.querySelectorAll('[data-way]').forEach((b) => {
-      b.addEventListener('click', () => this.setWay(b.dataset.way));
+    const ta = this.root.querySelector('#words');
+    ta.addEventListener('input', () => { this.words = ta.value; this.reading(); });
+
+    const input = this.root.querySelector('[data-role=file]');
+    const drop = this.root.querySelector('[data-role=drop]');
+    drop.addEventListener('click', () => input.click());
+    input.addEventListener('change', () => {
+      this.add([...input.files]);
+      // Cleared so that picking the same file twice in a row still fires.
+      input.value = '';
     });
+    drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
+    drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+    drop.addEventListener('drop', (e) => {
+      e.preventDefault();
+      drop.classList.remove('over');
+      this.add([...e.dataTransfer.files]);
+    });
+
+    this.moreEl.addEventListener('click', () => {
+      this.stagedEl.scrollBy({ left: this.stagedEl.clientWidth * 0.8, behavior: 'smooth' });
+    });
+    this.stagedEl.addEventListener('scroll', () => this.reflectTray());
+
     this.root.querySelector('[data-role=commit]').addEventListener('click', () => this.commit());
     this.root.querySelector('[data-role=cancel]').addEventListener('click', () => this.dismiss());
 
-    // Anywhere outside the card is the way back, and it takes nothing with it.
+    // Anywhere outside the orb is the way back, and it takes nothing with it.
     this.root.querySelector('[data-role=scrim]').addEventListener('click', () => this.dismiss());
     this.modal.addEventListener('click', (e) => { if (e.target === this.modal) this.dismiss(); });
     this.onKey = (e) => { if (e.key === 'Escape' && !this.sealing) this.dismiss(); };
     document.addEventListener('keydown', this.onKey);
 
-    this.drawStage();
+    this.onResize = () => this.reflectTray();
+    window.addEventListener('resize', this.onResize);
+
     this.reading();
   }
 
@@ -91,206 +106,92 @@ export class Contribute {
     location.hash = '#/';
   }
 
-  setWay(way) {
-    if (this.way === way) return;
-    this.stopRecording();
-    this.way = way;
-    this.root.querySelectorAll('[data-way]').forEach((b) => {
-      const on = b.dataset.way === way;
-      b.classList.toggle('on', on);
-      b.setAttribute('aria-selected', String(on));
-    });
-    this.drawStage();
-  }
-
-  // ---------------------------------------------------------- the inputs --
-
-  drawStage() {
-    const shared = `
-      <div class="panel">
-        <label for="words">${this.way === 'write' ? 'the memory' : 'a line about it, if you want one'}</label>
-        <textarea id="words" rows="${this.way === 'write' ? 4 : 2}"
-          placeholder="${this.way === 'write' ? 'the smell of the hallway at my grandmother’s' : 'optional'}">${esc(this.words)}</textarea>
-      </div>`;
-
-    if (this.way === 'write') {
-      this.stage.innerHTML = shared;
-    } else if (this.way === 'speak') {
-      this.stage.innerHTML = `
-        <div class="panel">
-          <label>say it out loud</label>
-          <div class="rec">
-            <button class="rec-btn" data-role="rec" aria-label="start recording"><i></i></button>
-            <div class="rec-meta">
-              <b data-role="clock">0:00</b>
-              <span data-role="rechint">tap to record. anything — a name, a hum, the room.</span>
-            </div>
-          </div>
-          <ul class="staged" data-role="staged"></ul>
-        </div>${shared}`;
-      this.stage.querySelector('[data-role=rec]').addEventListener('click', () => this.toggleRecording());
-    } else if (this.way === 'draw') {
-      this.stage.innerHTML = `
-        <div class="panel">
-          <label>draw it, or write one word by hand</label>
-          <canvas data-role="pad" width="900" height="480"
-            style="width:100%;border-radius:12px;background:#fff;border:1.5px dashed var(--hairline);touch-action:none;cursor:crosshair"></canvas>
-          <div style="display:flex;gap:.5rem;margin-top:.6rem">
-            <button class="btn" data-role="clear">start over</button>
-            <span class="status" data-role="padhint">use your finger or the mouse</span>
-          </div>
-        </div>${shared}`;
-      this.pad();
-    } else {
-      this.stage.innerHTML = `
-        <div class="panel">
-          <label>a photo or a short clip</label>
-          <div class="drop" data-role="drop">
-            drop it here, or <button class="linkish" data-role="pick">choose a file</button>
-            <input type="file" data-role="file" multiple accept="image/*,video/*,audio/*" hidden>
-          </div>
-          <ul class="staged" data-role="staged"></ul>
-        </div>${shared}`;
-      this.fileStage();
-    }
-
-    const ta = this.stage.querySelector('#words');
-    ta?.addEventListener('input', () => { this.words = ta.value; this.reading(); });
-    this.drawStaged();
-  }
-
-  fileStage() {
-    const input = this.stage.querySelector('[data-role=file]');
-    const drop = this.stage.querySelector('[data-role=drop]');
-    this.stage.querySelector('[data-role=pick]').addEventListener('click', () => input.click());
-    input.addEventListener('change', () => this.add([...input.files]));
-    drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
-    drop.addEventListener('dragleave', () => drop.classList.remove('over'));
-    drop.addEventListener('drop', (e) => {
-      e.preventDefault();
-      drop.classList.remove('over');
-      this.add([...e.dataTransfer.files]);
-    });
-  }
-
-  /** A scribble pad. What comes out is a PNG, so it goes down the image path. */
-  pad() {
-    const canvas = this.stage.querySelector('[data-role=pad]');
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.lineCap = ctx.lineJoin = 'round';
-    ctx.strokeStyle = '#17161c';
-    ctx.lineWidth = 6;
-
-    let drawing = false, last = null, marked = false;
-    const at = (e) => {
-      const r = canvas.getBoundingClientRect();
-      return [(e.clientX - r.left) * (canvas.width / r.width), (e.clientY - r.top) * (canvas.height / r.height)];
-    };
-    canvas.addEventListener('pointerdown', (e) => {
-      canvas.setPointerCapture(e.pointerId);
-      drawing = true; marked = true; last = at(e);
-      ctx.beginPath(); ctx.arc(last[0], last[1], 3, 0, 7); ctx.fillStyle = '#17161c'; ctx.fill();
-    });
-    canvas.addEventListener('pointermove', (e) => {
-      if (!drawing) return;
-      const p = at(e);
-      ctx.beginPath(); ctx.moveTo(last[0], last[1]); ctx.lineTo(p[0], p[1]); ctx.stroke();
-      last = p;
-    });
-    const up = () => { drawing = false; this.padDirty = marked; };
-    canvas.addEventListener('pointerup', up);
-    canvas.addEventListener('pointerleave', up);
-    this.stage.querySelector('[data-role=clear]').addEventListener('click', () => {
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = '#17161c';
-      marked = false;
-      this.padDirty = false;
-    });
-    this.padEl = canvas;
-  }
-
-  async toggleRecording() {
-    if (this.recorder) return this.stopRecording();
-    let stream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch {
-      this.status('the browser would not give us the microphone. try a file instead.');
-      return;
-    }
-    const chunks = [];
-    const rec = new MediaRecorder(stream);
-    rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
-    rec.onstop = () => {
-      stream.getTracks().forEach((t) => t.stop());
-      const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
-      const ext = (rec.mimeType || '').includes('ogg') ? 'ogg' : (rec.mimeType || '').includes('mp4') ? 'm4a' : 'webm';
-      this.files = this.files.filter((f) => f.kind !== 'audio');
-      this.add([new File([blob], `said-out-loud.${ext}`, { type: blob.type })]);
-    };
-    rec.start();
-    this.recorder = rec;
-    this.recSeconds = 0;
-    this.stage.querySelector('[data-role=rec]')?.classList.add('on');
-    this.stage.querySelector('[data-role=rechint]').textContent = 'listening. tap again when you are done.';
-    this.recTimer = setInterval(() => {
-      this.recSeconds++;
-      const el = this.stage.querySelector('[data-role=clock]');
-      if (el) el.textContent = `0:${String(this.recSeconds).padStart(2, '0')}`;
-      if (this.recSeconds >= 60) this.stopRecording();
-    }, 1000);
-  }
-
-  stopRecording() {
-    clearInterval(this.recTimer);
-    if (!this.recorder) return;
-    try { this.recorder.stop(); } catch {}
-    this.recorder = null;
-    this.stage.querySelector('[data-role=rec]')?.classList.remove('on');
-    const hint = this.stage.querySelector('[data-role=rechint]');
-    if (hint) hint.textContent = 'got it. record again to replace it.';
-  }
+  // ---------------------------------------------------------- what is in --
 
   add(list) {
     for (const file of list) {
       const kind = kindOf(file);
       if (!kind) continue;
-      if (kind === 'audio') this.files = this.files.filter((f) => f.kind !== 'audio');
-      this.files.push({ file, kind });
+      // Nothing displaces anything else: an eighth photo and a third recording
+      // are both just one more thing the memory is made of.
+      const item = { file, kind, url: URL.createObjectURL(file) };
+      this.items.push(item);
+      if (kind === 'video') this.poster(item);
     }
     this.drawStaged();
     this.reading();
   }
 
+  /**
+   * A frame out of the middle of a clip, so the row reads as what was actually
+   * put in. A file the browser cannot decode simply keeps its glyph tile --
+   * the server can still convert it later, at commit.
+   */
+  async poster(item) {
+    try {
+      const v = document.createElement('video');
+      v.muted = true;
+      v.playsInline = true;
+      v.preload = 'metadata';
+      v.src = item.url;
+      await once(v, 'loadeddata', 4000);
+      v.currentTime = Math.min(0.3, (v.duration || 1) * 0.1);
+      await once(v, 'seeked', 2000).catch(() => {});
+      const side = Math.min(v.videoWidth, v.videoHeight);
+      if (!side) return;
+      const c = document.createElement('canvas');
+      c.width = c.height = 124;
+      c.getContext('2d').drawImage(
+        v, (v.videoWidth - side) / 2, (v.videoHeight - side) / 2, side, side, 0, 0, 124, 124);
+      item.poster = c.toDataURL('image/jpeg', 0.72);
+      this.drawStaged();
+    } catch {
+      /* it keeps the glyph */
+    }
+  }
+
   drawStaged() {
-    const el = this.stage.querySelector('[data-role=staged]');
-    if (!el) return;
-    el.innerHTML = this.files.map((f, i) => `
-      <li><b>${f.kind}</b> ${esc(f.file.name)}
-        <button class="drop-one" data-drop="${i}" aria-label="remove">×</button></li>`).join('');
-    el.querySelectorAll('[data-drop]').forEach((b) => {
+    this.trayEl.hidden = !this.items.length;
+    this.stagedEl.innerHTML = this.items.map((it, i) => {
+      const face = it.kind === 'image' ? `<img src="${it.url}" alt="">`
+        : it.poster ? `<img src="${it.poster}" alt="">`
+        : it.kind === 'video' ? iconClip() : iconWave();
+      return `
+        <li class="tile" title="${esc(it.file.name)}">
+          ${face}
+          <button class="tile-x" data-drop="${i}" aria-label="remove ${esc(it.file.name)}">×</button>
+        </li>`;
+    }).join('');
+    this.stagedEl.querySelectorAll('[data-drop]').forEach((b) => {
       b.addEventListener('click', () => {
-        this.files.splice(Number(b.dataset.drop), 1);
+        const [gone] = this.items.splice(Number(b.dataset.drop), 1);
+        if (gone) URL.revokeObjectURL(gone.url);
         this.drawStaged();
         this.reading();
       });
     });
+    this.reflectTray();
+  }
+
+  /** The arrow is only offered when there is in fact something past the edge. */
+  reflectTray() {
+    if (!this.moreEl) return;
+    const el = this.stagedEl;
+    this.moreEl.hidden = el.scrollWidth - el.clientWidth - el.scrollLeft < 4;
   }
 
   // ----------------------------------------------------- showing the work --
 
   /**
-   * The panel that says what is about to happen. Two things it must be honest
-   * about: the emotion read is keyword matching, not a model, and the memory
-   * will be taken apart and will not come back whole.
+   * Only built under ?dev. Two things it has to be honest about: the emotion
+   * read is keyword matching, not a model, and the memory will be taken apart
+   * and will not come back whole.
    */
   reading() {
+    if (!this.readingEl) return;
     const text = this.words.trim();
     const a = analyzeMemory(text || 'a moment');
-    const media = this.files.length + (this.padDirty ? 1 : 0);
+    const media = this.items.length;
     const hue = EMOTION_HUE[a.emotion] ?? 268;
     this.readingEl.style.setProperty('--reading', `hsl(${hue} 62% 58%)`);
     this.readingEl.innerHTML = `
@@ -311,16 +212,7 @@ export class Contribute {
     const btn = this.root.querySelector('[data-role=commit]');
     const words = this.words.trim();
 
-    // The scribble is only collected at the last moment, so a half-finished
-    // drawing is never uploaded behind the contributor's back.
-    if (this.way === 'draw' && this.padDirty && !this.files.some((f) => f.kind === 'image' && f.file.name === 'drawn.png')) {
-      const blob = await new Promise((r) => this.padEl.toBlob(r, 'image/png'));
-      if (blob) this.files.push({ file: new File([blob], 'drawn.png', { type: 'image/png' }), kind: 'image' });
-    }
-    this.stopRecording();
-    await new Promise((r) => setTimeout(r, 120));   // let the recorder flush
-
-    if (!words && !this.files.length) return this.status('give it something first — even one word.');
+    if (!words && !this.items.length) return this.status('give it something first.');
 
     btn.disabled = true;
     this.sealing = true;
@@ -345,7 +237,7 @@ export class Contribute {
     }
 
     let n = 0;
-    for (const item of this.files) {
+    for (const item of this.items) {
       n++;
       const sid = `${item.kind.slice(0, 3)}${n}`;
       this.status(`tearing apart ${item.file.name}…`);
@@ -435,13 +327,13 @@ export class Contribute {
     // The contribution joins the audioscape on the way back to the collection, so
     // you hear your own memory arrive in the room the moment you see it land.
     this.session.queue(analysis, title);
-    this.files = [];
+    this.release();
     this.words = '';
 
-    // The card gets out of the way, then the frost lifts, and only then does
-    // the marble fly in -- so it is watched all the way into its slot on a page
-    // that is already clear, instead of arriving blurred behind glass under a
-    // form that has not finished closing.
+    // The orb gets out of the way, then the frost lifts, and only then does the
+    // marble fly in -- so it is watched all the way into its slot on a page that
+    // is already clear, instead of arriving blurred behind glass under a form
+    // that has not finished closing.
     this.card?.classList.add('sealed');
     await new Promise((r) => setTimeout(r, 340));
     this.sealing = false;
@@ -459,9 +351,16 @@ export class Contribute {
     return res.json();
   }
 
+  /** Every thumbnail holds a blob alive until it is let go of. */
+  release() {
+    this.items.forEach((it) => URL.revokeObjectURL(it.url));
+    this.items = [];
+  }
+
   close() {
-    this.stopRecording();
+    this.release();
     document.removeEventListener('keydown', this.onKey);
+    window.removeEventListener('resize', this.onResize);
   }
 }
 
@@ -494,15 +393,22 @@ function boldest(list) {
 const tick = () => new Promise((r) => setTimeout(r, 16));
 const esc = (s) => String(s).replace(/[&<>"]/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
 
-function iconPen() {
-  return `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4L8 20l-5 1 1-5z"/><path d="M14 6l4 4"/></svg>`;
+/** One event, or a rejection -- so a file that never decodes cannot hang a tile. */
+function once(el, type, ms) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { el.removeEventListener(type, done); reject(new Error(type)); }, ms);
+    const done = () => { clearTimeout(timer); resolve(); };
+    el.addEventListener(type, done, { once: true });
+    el.addEventListener('error', () => { clearTimeout(timer); reject(new Error('error')); }, { once: true });
+  });
 }
-function iconMic() {
-  return `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg>`;
+
+function iconArrow() {
+  return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M13 6l6 6-6 6"/></svg>`;
 }
-function iconScribble() {
-  return `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 17c3-9 6 4 9-3s5 4 9-4"/></svg>`;
+function iconClip() {
+  return `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M10 9.5l5 2.5-5 2.5z"/></svg>`;
 }
-function iconFrame() {
-  return `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="M4 17l5-4 4 3 3-2 4 3"/></svg>`;
+function iconWave() {
+  return `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M3 12h2M8 7v10M12 4v16M16 8v8M20 11h1"/></svg>`;
 }

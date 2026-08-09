@@ -12,9 +12,10 @@
    it is coming apart. Going from one to the other should feel like putting
    your eye to a hole in the page.
 
-   LEAVING A MEMORY uses the same door as opening one: a card over the frosted
-   collection, dismissed by clicking outside it. Backing out of writing should
-   cost exactly as little as backing out of reading.
+   LEAVING A MEMORY uses the same door as opening one, and the same silhouette:
+   an orb over the frosted collection, dismissed by clicking outside it. The
+   light twin of the dark one. Backing out of writing should cost exactly as
+   little as backing out of reading.
    ========================================================================== */
 
 :root {
@@ -558,26 +559,6 @@ body.immersive .frame { opacity: 0; visibility: hidden; transition: opacity 0.4s
 #overlay { position: fixed; inset: 0; z-index: 50; pointer-events: none; }
 #overlay.on { pointer-events: auto; }
 
-/* the contribution card is still a card over the page: the contents are centred
-   by the grid, so they stay centred at every size and through every resize
-   without anything being measured */
-.addmodal {
-  position: fixed;
-  inset: 0;
-  display: grid;
-  place-items: center;
-}
-
-/* frosted glass over the collection: blurred, but still bright and still
-   saturated, so the marbles read as being behind glass rather than smudged */
-.orbscrim {
-  position: absolute;
-  inset: 0;
-  backdrop-filter: blur(16px) saturate(1.6) brightness(1.06);
-  -webkit-backdrop-filter: blur(16px) saturate(1.6) brightness(1.06);
-  background: rgba(253, 252, 248, 0.5);
-  animation: fadein 0.45s ease both;
-}
 @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
 
 /* ---------------------------------------------------- a memory, opened --- */
@@ -638,7 +619,9 @@ body.immersive .frame { opacity: 0; visibility: hidden; transition: opacity 0.4s
   flex-wrap: wrap;
   padding: 1.1rem 1.4rem;
 }
-.hud-actions { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; justify-content: flex-end; }
+/* margin-left auto rather than relying on a left-hand sibling: inside a memory
+   the actions are the whole bar, and they still belong at the right edge */
+.hud-actions { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
 
 /* the collection's pill button, read the other way up */
 .hudbtn {
@@ -1271,145 +1254,176 @@ body.immersive .frame { opacity: 0; visibility: hidden; transition: opacity 0.4s
 
 /* --------------------------------------------------------- contributing --- */
 
-/* The same door as a memory: a card over the frosted page, with the collection
-   still visible behind it. Clicking outside is how you leave, and leaving that
-   way creates nothing. */
-.addcard {
+/* Leaving a memory is the same kind of place as opening one: the whole screen,
+   not a card sitting on the page. The difference is which way up it is read. A
+   memory is a dark sphere you go inside; this is its light twin -- the same
+   silhouette and the same halo, on paper instead of in the void. */
+.addscene {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: clamp(1rem, 4vmin, 2.4rem);
+  animation: fadein 0.4s ease both;
+}
+
+/* the collection stays visible through it, frosted and still bright, so this
+   reads as glass laid over the wall rather than a new page */
+.addveil {
+  position: absolute;
+  inset: 0;
+  backdrop-filter: blur(22px) saturate(1.5) brightness(1.07);
+  -webkit-backdrop-filter: blur(22px) saturate(1.5) brightness(1.07);
+  background:
+    radial-gradient(760px 600px at 28% 8%, color-mix(in srgb, var(--dot-a) 10%, transparent), transparent 66%),
+    radial-gradient(680px 560px at 80% 94%, color-mix(in srgb, var(--scrawl) 9%, transparent), transparent 64%),
+    rgba(253, 252, 248, 0.7);
+}
+
+/* The orb, opened up. Heavily rounded rather than circular -- a real circle
+   wastes the corners a text field needs -- but lit like one: a soft halo the
+   colour of the page's own accent, sitting off the paper rather than on it. */
+.addorb {
   position: relative;
   z-index: 2;
-  width: min(660px, calc(100vw - 3.5rem));
-  max-height: min(86vh, 900px);
+  width: min(560px, 100%);
+  max-height: 100%;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 2rem 2rem 1.6rem;
-  background: rgba(255, 255, 255, 0.97);
-  border-radius: 22px;
-  box-shadow: var(--pop);
-  animation: cardin 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+  display: flex;
+  flex-direction: column;
+  gap: 1.4rem;
+  padding: clamp(1.5rem, 4vmin, 2.3rem);
+  border-radius: clamp(26px, 5vmin, 44px);
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow:
+    var(--pop),
+    0 0 100px -34px color-mix(in srgb, var(--dot-a) 65%, transparent);
+  animation: orbin 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-@keyframes cardin {
-  from { opacity: 0; transform: translateY(18px) scale(0.97); }
+@keyframes orbin {
+  from { opacity: 0; transform: translateY(16px) scale(0.96); }
   to   { opacity: 1; transform: none; }
 }
 /* it gets out of the way so the marble can be watched into its slot */
-.addcard.sealed {
-  animation: cardout 0.34s ease forwards;
+.addorb.sealed {
+  animation: orbout 0.34s ease forwards;
   pointer-events: none;
 }
-@keyframes cardout {
+@keyframes orbout {
   to { opacity: 0; transform: translateY(-10px) scale(0.94); }
 }
 
-.add-head { margin-bottom: 1.6rem; }
-.add-head h2 {
-  font-family: var(--display);
-  font-weight: 400;
-  font-size: clamp(1.7rem, 4vw, 2.3rem);
-  letter-spacing: -0.015em;
-  line-height: 1.12;
-}
-.add-head p {
-  font-family: var(--marker);
-  font-size: 1.08rem;
-  color: var(--dim);
-  margin-top: 0.5rem;
-}
-
-/* the four ways in. one tap, then you are already contributing. */
-.ways { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.55rem; margin-bottom: 1.3rem; }
-.way {
-  padding: 0.95rem 0.5rem 0.8rem;
-  border: 1.5px solid var(--hairline);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.7);
-  text-align: center;
-  transition: border-color 0.18s, transform 0.18s, box-shadow 0.18s, background 0.18s;
-}
-.way:hover { transform: translateY(-2px); box-shadow: var(--lift); border-color: #d3ccbb; }
-.way.on { border-color: var(--ink); background: #fff; box-shadow: var(--lift); }
-.way svg { display: block; margin: 0 auto 0.4rem; }
-.way b { display: block; font-family: var(--marker); font-weight: 400; font-size: 1rem; }
-.way span { display: block; font-size: 0.66rem; color: var(--faint); margin-top: 0.1rem; }
-
-.panel {
-  border: 1.5px solid var(--hairline);
-  border-radius: 16px;
-  background: #fff;
-  padding: 1.2rem;
-  margin-bottom: 1.1rem;
-}
-.panel > label {
+/* Two fields and nothing else. The label is the only instruction either of
+   them gets -- what to put in a box called "free text" is not a question a
+   paragraph underneath would answer any better. */
+.addfield > label {
   display: block;
-  font-size: 0.68rem;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
+  font-family: var(--marker);
+  font-size: 1rem;
   color: var(--faint);
-  margin-bottom: 0.55rem;
+  margin-bottom: 0.5rem;
 }
 
-textarea, input[type=text] {
+.addtext {
   width: 100%;
-  border: 0;
-  outline: 0;
-  background: transparent;
+  min-height: clamp(110px, 20vh, 190px);
+  padding: 0.85rem 1rem;
+  border: 1.5px solid var(--hairline);
+  border-radius: 18px;
+  background: #fff;
   font-family: var(--display);
-  font-size: 1.15rem;
-  line-height: 1.5;
-  resize: none;
+  font-size: 1.1rem;
+  line-height: 1.55;
+  resize: vertical;
+  transition: border-color 0.18s;
 }
-textarea::placeholder, input::placeholder { color: var(--faint); }
+.addtext:focus { border-color: color-mix(in srgb, var(--dot-a) 45%, var(--hairline)); }
 
-.drop {
+/* one target for both ways in, because on a phone there is only one of them */
+.adddrop {
+  display: block;
+  width: 100%;
+  padding: 1.5rem 1rem;
   border: 1.5px dashed var(--hairline);
-  border-radius: 14px;
-  padding: 2.2rem 1rem;
-  text-align: center;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.6);
   color: var(--dim);
   font-family: var(--marker);
-  font-size: 1.02rem;
-  transition: border-color 0.18s, background 0.18s;
+  font-size: 1.1rem;
+  transition: border-color 0.18s, background 0.18s, color 0.18s;
 }
-.drop.over { border-color: var(--dot-a); background: color-mix(in srgb, var(--dot-a) 6%, transparent); }
-.drop button { color: var(--ink); border-bottom: 2px solid var(--dot-b); }
+.adddrop:hover { border-color: #cec6b2; color: var(--ink); }
+.adddrop.over {
+  border-color: var(--dot-a);
+  background: color-mix(in srgb, var(--dot-a) 7%, transparent);
+  color: var(--ink);
+}
 
-.staged { list-style: none; margin-top: 0.8rem; display: flex; flex-direction: column; gap: 0.35rem; }
-.staged li {
+/* What is already in: one row of what it actually looks like, not a list of
+   filenames. There is no cap on how many -- the row scrolls, and the arrow
+   only appears once there is something past the edge to reach. */
+.addtray { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.7rem; }
+.addtray[hidden] { display: none; }
+.addtray ul {
+  list-style: none;
   display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.45rem 0.6rem;
-  border-radius: 9px;
-  background: var(--paper-deep);
-  font-size: 0.86rem;
-  color: var(--dim);
+  gap: 0.5rem;
+  min-width: 0;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
 }
-.staged b { font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink); }
-.staged .drop-one { margin-left: auto; color: var(--faint); font-size: 1.1rem; line-height: 1; padding: 0 0.2rem; }
-.staged .drop-one:hover { color: var(--dot-b); }
+.addtray ul::-webkit-scrollbar { display: none; }
 
-/* recording */
-.rec { display: flex; align-items: center; gap: 1rem; }
-.rec-btn {
-  width: 62px; height: 62px;
-  border-radius: 50%;
-  border: 2px solid var(--ink);
+.tile {
+  position: relative;
+  flex: 0 0 auto;
+  width: 62px;
+  height: 62px;
+  border-radius: 13px;
+  overflow: hidden;
+  border: 1.5px solid var(--hairline);
+  background: var(--paper-deep);
   display: grid;
   place-items: center;
-  flex: 0 0 auto;
-  transition: transform 0.18s, background 0.18s;
+  color: var(--faint);
 }
-.rec-btn i { width: 20px; height: 20px; border-radius: 50%; background: var(--dot-b); display: block; transition: all 0.2s; }
-.rec-btn:hover { transform: scale(1.05); }
-.rec-btn.on i { width: 17px; height: 17px; border-radius: 3px; }
-.rec-btn.on { animation: recpulse 1.4s ease-in-out infinite; }
-@keyframes recpulse {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--dot-b) 45%, transparent); }
-  50%      { box-shadow: 0 0 0 12px transparent; }
+.tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tile-x {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: rgba(23, 22, 28, 0.45);
+  color: #fff;
+  font-size: 0.78rem;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  transition: background 0.15s;
 }
-.rec-meta { font-family: var(--marker); font-size: 1.05rem; color: var(--dim); }
-.rec-meta b { display: block; font-family: var(--display); font-size: 1.5rem; color: var(--ink); font-variant-numeric: tabular-nums; }
+.tile:hover .tile-x { background: rgba(23, 22, 28, 0.85); }
 
-/* the live read of what the transformation is about to do */
+.traymore {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--hairline);
+  color: var(--dim);
+  display: grid;
+  place-items: center;
+  transition: color 0.18s, border-color 0.18s;
+}
+.traymore:hover { color: var(--ink); border-color: #cec6b2; }
+
+/* The live read of what the transformation is about to do. It is a developer's
+   window on the machinery, not something a contributor needs in order to leave
+   a memory, so it is only built when ?dev is on the URL. */
 .reading {
   border: 1.5px solid var(--hairline);
   border-left: 4px solid var(--reading, var(--faint));
@@ -1419,7 +1433,6 @@ textarea::placeholder, input::placeholder { color: var(--faint); }
   font-size: 0.85rem;
   color: var(--dim);
   line-height: 1.5;
-  margin-bottom: 1.2rem;
   transition: border-color 0.4s;
 }
 .reading b { color: var(--ink); font-weight: 500; }
@@ -1432,7 +1445,26 @@ textarea::placeholder, input::placeholder { color: var(--faint); }
   margin-bottom: 0.3rem;
 }
 
-.add-actions { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.addfoot { display: flex; align-items: center; gap: 0.9rem; }
+.addquiet {
+  font-family: var(--marker);
+  font-size: 1.02rem;
+  color: var(--dim);
+  padding: 0.55rem 0.1rem;
+  transition: color 0.18s;
+}
+.addquiet:hover { color: var(--ink); }
+/* The status takes the slack, so "continue" sits at the right edge whether or
+   not there is anything to say -- and a long filename is cut rather than
+   allowed to push the button off the end of the row. */
+.addfoot .status {
+  margin-left: auto;
+  min-width: 0;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .status { font-size: 0.85rem; color: var(--dim); font-family: var(--marker); }
 
 /* ---------------------------------------------------------------- toast --- */
@@ -1474,8 +1506,8 @@ textarea::placeholder, input::placeholder { color: var(--faint); }
   .thought-bubble { font-size: 0.95rem; padding: 0.6rem 0.9rem; left: 84px; bottom: 66px; }
   .marble-ring text { font-size: 8.4px; }
 
-  .ways { grid-template-columns: repeat(2, 1fr); }
-  .addcard { width: calc(100vw - 1.6rem); padding: 1.4rem 1.2rem 1.2rem; max-height: 88vh; }
+  .addscene { padding: 0.8rem; }
+  .addorb { gap: 1.1rem; }
   .sphere { width: min(78vmin, 480px); }
 
   /* inside a memory the controls wrap rather than shrink away: on a phone the
@@ -1526,7 +1558,7 @@ textarea::placeholder, input::placeholder { color: var(--faint); }
 @media (prefers-reduced-motion: reduce) {
   .marble-body, .plate-inner, .grain, .marble-ring,
   .hero-tail, .hero-tongue, .hero-head, .hero-eye { animation: none !important; }
-  .plate, .marble, .trinket, .addcard { animation-duration: 0.01ms !important; }
+  .plate, .marble, .trinket, .addorb { animation-duration: 0.01ms !important; }
   .thought-pip, .thought-bubble { animation-duration: 0.01ms !important; }
   .seq-beat, .seq-word, .seq-layer { transition-duration: 0.01ms !important; }
   .seq-flash .seq-frame { animation: none; }

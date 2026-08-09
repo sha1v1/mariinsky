@@ -21,6 +21,14 @@
 // around. Nothing is deleted from the stored recipe: switch back and it is all
 // still there.
 
+/**
+ * The developer's window. With `?dev` on the URL the app also shows its
+ * machinery -- the transformation panel while contributing, and the chrome,
+ * readouts and history inside a memory. The query survives hash routing, so
+ * `/?dev#/orb/…` and every screen after it keeps it.
+ */
+export const DEV = /(^|[?&])dev(=|$|&)/.test(location.search);
+
 export const SHADERS = [
   { v: 'none', label: 'none' },
   { v: 'blurry', label: 'blurry — out of focus, like it was never sharp' },

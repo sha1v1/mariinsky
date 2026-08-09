@@ -26,7 +26,7 @@ import { layerCanvas, trimLayerCache } from './imagelayers.js';
 import { composeVersion, idsOf, settingsOf } from './compose.js';
 import { makeStream, decayAt, retainedStrain } from './sequence.js';
 import { StreamPlayer } from './stream.js';
-import { get } from './settings.js';
+import { get, DEV } from './settings.js';
 import { r3 } from './rng.js';
 import { EMOTION_HUE } from './emotion.js';
 
@@ -91,15 +91,15 @@ export class OrbView {
       <div class="orbscene" data-role="scene" style="--glow:${g[0]};--g1:${g[0]};--g2:${g[1]};--g3:${g[2]}">
         <div class="orbveil" data-role="veil"></div>
 
+        ${DEV ? `
         <header class="hud">
-          <button class="hudbtn" data-act="back">← the collection</button>
           <div class="hud-actions">
             <button class="hudbtn" data-act="reveal" title="what is here and what is gone">contents</button>
             <button class="hudbtn" data-act="lab" title="dial in how this memory replays">laboratory</button>
             <button class="hudbtn" data-act="mute" aria-pressed="false">sound on</button>
             <button class="hudbtn hudbtn-solid" data-act="again">open it again</button>
           </div>
-        </header>
+        </header>` : ''}
 
         <div class="stagewrap">
           <div class="orbstage" data-role="stage">
@@ -111,16 +111,17 @@ export class OrbView {
             </div>
             <div class="orb-caption">
               <h2 class="orb-title">${esc(o.title)}</h2>
-              <p class="orb-sub" data-role="sub"></p>
+              ${DEV ? '<p class="orb-sub" data-role="sub"></p>' : ''}
             </div>
           </div>
           <aside class="reveal" data-role="reveal" hidden></aside>
         </div>
 
+        ${DEV ? `
         <footer class="timeline">
           <div class="tl-label">every version of this memory</div>
           <div class="tl-strip" data-role="strip"></div>
-        </footer>
+        </footer>` : ''}
       </div>`;
 
     this.scene = this.root.querySelector('[data-role=scene]');
@@ -136,10 +137,10 @@ export class OrbView {
     // next memory you open -- one "open it again" would count as two.
     this.scene.addEventListener('click', (e) => this.onClick(e));
 
-    // Leaving. The veil is the only empty space that dismisses, because in here
-    // the sphere fills the screen and a stray click on the backdrop is far more
-    // likely to be a miss than a decision.
-    this.root.querySelector('[data-role=veil]').addEventListener('click', () => this.dismiss());
+    // Leaving. There is no button back out: anywhere that is not the orb, its
+    // caption, or a control is the door -- the same gesture that closes the
+    // contribution screen. Escape works for the keyboard. (The outside-click
+    // itself is handled in onClick, with the rest of the scene's clicks.)
     this.onKey = (e) => { if (e.key === 'Escape') this.dismiss(); };
     document.addEventListener('keydown', this.onKey);
 
@@ -188,7 +189,6 @@ export class OrbView {
 
   onClick(e) {
     const act = e.target.closest('[data-act]')?.dataset.act;
-    if (act === 'back') return this.dismiss();
     if (act === 'lab') { location.hash = `#/lab/${this.orb.id}`; return; }
     if (act === 'again') return this.again();
     if (act === 'reveal') return this.toggleReveal();
@@ -198,7 +198,10 @@ export class OrbView {
       this.audio.setMuted(next);
       btn.textContent = next ? 'sound off' : 'sound on';
       btn.setAttribute('aria-pressed', String(next));
+      return;
     }
+    // Anywhere outside the orb is the way back out.
+    if (!e.target.closest('.orbstage, .hud, .timeline, .reveal')) this.dismiss();
   }
 
   /** The marble you clicked becomes the orb: grow out of exactly where it was. */

@@ -169,8 +169,8 @@ async function route() {
     document.body.classList.add('overlay-on');
     garden.frost(true);
     // The printed border belongs to the page, and a memory is not on the page
-    // any more -- it is the whole screen. The contribution card, which really
-    // is a card laid over the collection, keeps its frame.
+    // any more -- it is the whole screen. Contributing keeps its frame: it is
+    // the collection's own light, laid over the collection.
     document.body.classList.add('immersive');
     orb = new View(overlay, orbAudio, scape, session);
     try {
