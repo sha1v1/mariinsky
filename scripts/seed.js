@@ -15,7 +15,11 @@ import { analyzeMemory } from '../public/js/emotion.js';
 import { marbleColor } from '../public/js/marble.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ORBS = path.join(__dirname, '..', 'data', 'orbs');
+// Matches server.js: seeding a deployed wall means pointing at the same disk.
+const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : path.join(__dirname, '..');
+const ORBS = path.join(DATA_DIR, 'data', 'orbs');
 fs.mkdirSync(ORBS, { recursive: true });
 
 const SEEDS = [

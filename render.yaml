@@ -1,0 +1,30 @@
+# mariinsky runs as one long-lived Node process with one persistent disk.
+# The wall is shared state: every contributed memory is a JSON file plus its
+# uploaded media on disk, so the disk is not a cache — losing it loses the wall.
+services:
+  - type: web
+    name: mariinsky
+    runtime: node
+    plan: starter          # free/ephemeral plans have no disk; starter is the floor
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/wall
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATA_DIR
+        value: /var/mariinsky
+      # Both left unset on purpose — set them in the Render dashboard so no key
+      # lands in the repo.
+      # Optional, only for semantic layer decomposition in the laboratory.
+      # Without it the lab offers the free manual PNG-import route instead.
+      - key: FAL_KEY
+        sync: false
+      # Required for DELETE /api/orbs/:id. Unset means deletion is refused
+      # outright, which is the safe default for a shared wall.
+      - key: MODERATION_KEY
+        sync: false
+    disk:
+      name: wall
+      mountPath: /var/mariinsky
+      sizeGB: 10

@@ -11,8 +11,14 @@ import { marbleColor } from './public/js/marble.js';
 
 const run = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ORBS = path.join(__dirname, 'data', 'orbs');
-const UPLOADS = path.join(__dirname, 'uploads');
+// The wall is the only thing here that has to survive a restart. Locally that
+// is just the repo; on a host it is one mounted disk, so both trees hang off a
+// single configurable root rather than two top-level directories.
+const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : __dirname;
+const ORBS = path.join(DATA_DIR, 'data', 'orbs');
+const UPLOADS = path.join(DATA_DIR, 'uploads');
 const PREP = path.join(UPLOADS, '_prep');
 fs.mkdirSync(ORBS, { recursive: true });
 fs.mkdirSync(PREP, { recursive: true });
@@ -629,5 +635,6 @@ sweepPrep();
 const PORT = process.env.PORT || 5173;
 app.listen(PORT, () => {
   console.log(`\n  mariinsky  →  http://localhost:${PORT}`);
+  console.log(`  wall storage: ${DATA_DIR}`);
   console.log(`  ffmpeg fallback: ${FFMPEG || 'not installed (undecodable files will be skipped)'}\n`);
 });

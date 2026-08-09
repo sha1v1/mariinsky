@@ -193,10 +193,17 @@ renderer inside this app's modal shell.
 
 The collection is a shared wall, so it needs a **persistent filesystem** for
 `data/orbs` and `uploads`. Vercel and other ephemeral-filesystem hosts will lose
-every contribution on redeploy — use Render, Railway, or Fly with a volume
-mounted at the project root.
+every contribution on redeploy — and, with no long-lived process to listen, will
+not run the API at all. Use Render, Railway, or Fly with a real volume.
 
-- `PORT` — defaults to 5173.
+`render.yaml` is committed and does this on Render: one web service, one 10GB
+disk mounted at `/var/mariinsky`, `DATA_DIR` pointed at the mount. Push the repo
+and pick *New → Blueprint*; set `FAL_KEY` and `MODERATION_KEY` in the dashboard.
+
+- `DATA_DIR` — the root that `data/orbs` and `uploads` hang off. Defaults to the
+  project directory, which is what you want locally. Set it to the mount path
+  when deploying, since a host disk mounts at one place and these are two trees.
+- `PORT` — defaults to 5173. Hosts that inject their own `PORT` just work.
 - `MODERATION_KEY` — set this to enable `DELETE /api/orbs/:id` via the
   `x-moderation-key` header. Without it, deletion is refused entirely: a shared
   wall should not let whoever is looking at a memory remove it.
