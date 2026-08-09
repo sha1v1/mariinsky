@@ -13,9 +13,26 @@
 // dominant emotion of the whole wall. That is the part that is genuinely
 // collective, and it is the only thing that loops.
 
-import { wallChords } from './emotion.js';
-
 const NOTES = { c: 0, d: 2, e: 4, f: 5, g: 7, a: 9, b: 11 };
+
+/**
+ * The bed is fixed: plain C major, I-IV-V-I, and it does not follow the wall.
+ * It used to be built from whichever emotion the wall held most of, which meant
+ * the room's resting sound swung between C major, A minor and open quartal
+ * voicings depending on what had been contributed -- and on a wall with a tie,
+ * on nothing more principled than object key order. A room should sound like
+ * itself; the memories are what vary.
+ *
+ * Written low on purpose. These are the notes as they sound, an octave under
+ * the brighter contributions, so the bed sits beneath the swells rather than
+ * competing with them in the same register.
+ */
+const BED_CHORDS = [
+  ['C3', 'E3', 'G3'],
+  ['F2', 'A2', 'C3'],
+  ['G2', 'B2', 'D3'],
+  ['C3', 'E3', 'G3'],
+];
 
 /** "C#4" / "A2" -> Hz. */
 export function noteFreq(name) {
@@ -237,14 +254,13 @@ export class Audioscape {
    * The only looping part of the collection: a slow pad on the chords of whichever
    * emotion the wall holds most of. Rebuilt whenever the wall changes.
    */
-  async setBed(emotions) {
+  async setBed() {
     await this.ensure();
     if (!this.ctx) return;
-    const chords = wallChords(emotions || []);
-    const key = JSON.stringify(chords);
+    const key = JSON.stringify(BED_CHORDS);
     if (this.bedChords === key && this.bedTimer) return;
     this.bedChords = key;
-    this.bedNotes = chords;
+    this.bedNotes = BED_CHORDS;
     this.bedIndex = 0;
     this.bedNext = this.ctx.currentTime + 0.15;
 
@@ -264,10 +280,11 @@ export class Audioscape {
     while (this.bedNext < this.ctx.currentTime + 2.5) {
       const notes = this.bedNotes[this.bedIndex % this.bedNotes.length];
       this.bedIndex++;
-      // Dropped an octave and thinned to the outer voices: the bed should sit
-      // under the swells, not compete with them.
-      const low = notes.filter((_, i) => i === 0 || i === notes.length - 1);
-      this.chord({ ...this.bed, instrument: 'ambient pad' }, low, this.bedNext, span, 1);
+      // The whole triad, thirds included. This used to keep only the outer two
+      // voices, which left bare fifths -- and a fifth with no third is neither
+      // major nor minor, so the bed read as hollow rather than warm. The room
+      // is separated from the swells by register now, not by gutting the chord.
+      this.chord({ ...this.bed, instrument: 'ambient pad' }, notes, this.bedNext, span, 1);
       this.bedNext += span;
     }
   }

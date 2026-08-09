@@ -47,7 +47,7 @@ export class Garden {
     this.draw();
     this.pollTimer = setInterval(() => this.refresh(), 15000);
 
-    this.scape.setBed(this.wall.map((m) => m.emotion));
+    this.scape.setBed();
     this.scape.duck(1, 1.4);
     this.scape.fadeMaster(1, 2.2);
 
@@ -368,10 +368,9 @@ export class Garden {
     const changed = wall.length !== this.wall.length
       || wall.some((m, i) => m.id !== this.wall[i]?.id || m.decay !== this.wall[i]?.decay);
     this.wall = wall;
-    if (changed) {
-      this.draw();
-      this.scape.setBed(wall.map((m) => m.emotion));
-    }
+    // The bed is fixed, so a changed wall only redraws -- it no longer retunes
+    // the room underneath.
+    if (changed) this.draw();
   }
 
   /** Called when a memory is opened over the top of the collection. */

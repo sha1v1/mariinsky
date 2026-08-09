@@ -110,9 +110,13 @@ has gone. A memory contributes when it is **viewed or created** — the swell is
 deferred until there is a collection to hear it in, so opening a memory and
 walking back out means you hear it arrive in the room behind you.
 
-Underneath sits **the bed**: a slow sustained pad built from the dominant
-emotion of the whole wall. It is the only looping part, and it is the only part
-that is genuinely collective.
+Underneath sits **the bed**: a slow sustained pad on a fixed C major I-IV-V-I,
+written low so it sits under the swells rather than in among them. It is the
+only looping part, and it does not follow the wall. It used to — it was built
+from whichever emotion the wall held most of — but that meant the room's
+resting sound swung between C major, A minor and open quartal voicings
+depending on what had been left there, and on a wall with a tie it came down to
+object key order. The room stays itself; the memories are what vary.
 
 Hovering a marble is a **preview**, not a contribution: a real two-second window
 of that memory's recorded audio if it has any, otherwise the chord its words
