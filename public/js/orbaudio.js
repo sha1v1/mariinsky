@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 // The sound of an orb: each audio window becomes a strand that fades in, plays
 // its moment, fades out, and leaves the room quiet for a while before doing it
 // again. Nothing is pre-rendered -- the "layers" are filters applied live, so
@@ -15,6 +16,12 @@
 // off it, so retiring one is a single ramp and the two sets dissolve through
 // each other instead.
 import { get, sub } from './settings.js';
+=======
+// The sound of an orb: each audio window becomes a looping strand, optionally
+// split into low/mid/high bands and run through tape effects. Nothing is
+// pre-rendered -- the "layers" are filters applied live, so they cost nothing
+// to store and can differ on every replay.
+>>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 
 const BANDS = [
   { type: 'lowpass', freq: 260, q: 0.7 },
@@ -27,10 +34,16 @@ export class OrbAudio {
     this.ctx = null;
     this.master = null;
     this.analyser = null;
+<<<<<<< HEAD
     this.buffers = new Map();
     this.gens = [];
     this.gen = null;
     this.impulse = null;
+=======
+    this.reverb = null;
+    this.buffers = new Map();
+    this.active = [];
+>>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
     this.muted = false;
   }
 
@@ -49,7 +62,16 @@ export class OrbAudio {
       this.master.connect(comp);
       comp.connect(this.analyser);
       this.analyser.connect(this.ctx.destination);
+<<<<<<< HEAD
       this.impulse = impulse(this.ctx, 2.6, 2.4);
+=======
+
+      this.reverb = this.ctx.createConvolver();
+      this.reverb.buffer = impulse(this.ctx, 2.6, 2.4);
+      this.reverbIn = this.ctx.createGain();
+      this.reverbIn.connect(this.reverb);
+      this.reverb.connect(this.master);
+>>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
     }
     if (this.ctx.state === 'suspended') {
       try { await this.ctx.resume(); } catch { /* needs a user gesture; caller retries */ }
@@ -95,6 +117,7 @@ export class OrbAudio {
     return p;
   }
 
+<<<<<<< HEAD
   /**
    * A fresh bus for a new set of strands, faded up from nothing. Each carries
    * its own convolver so that retiring the generation takes its tail with it --
@@ -170,6 +193,26 @@ export class OrbAudio {
         try { this.startElementStrand(gen, src, comp, s, i, strands.length); } catch { /* no usable audio */ }
       });
     });
+=======
+  async play(orb, version) {
+    await this.ensure();
+    if (!this.ctx) return;
+    this.stopStrands();
+
+    const strands = version.audio?.strands || [];
+    for (const s of strands) {
+      const comp = orb.components[s.c];
+      if (!comp) continue;
+      const src = orb.sources[comp.src];
+      if (!src?.url) continue;
+      try {
+        await this.startStrand(src, comp, s);
+      } catch (err) {
+        console.warn('strand failed, falling back to element source', comp.src, err);
+        try { this.startElementStrand(src, comp, s); } catch { /* this source has no usable audio */ }
+      }
+    }
+>>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 
     const target = this.muted ? 0 : 1;
     this.master.gain.cancelScheduledValues(this.ctx.currentTime);
@@ -177,6 +220,7 @@ export class OrbAudio {
     this.master.gain.linearRampToValueAtTime(target, this.ctx.currentTime + 1.6);
   }
 
+<<<<<<< HEAD
   /** Everything between a strand's source and its generation's bus. */
   buildChain(gen, s, index, total) {
     const ctx = this.ctx;
@@ -188,6 +232,17 @@ export class OrbAudio {
     const flat = s.bands.every((b) => b > 0.98);
     if (flat) {
       input.connect(out);
+=======
+  buildChain(s) {
+    const ctx = this.ctx;
+    const input = ctx.createGain();
+    const strandGain = ctx.createGain();
+    strandGain.gain.value = 0;
+
+    const flat = s.bands.every((b) => b > 0.98);
+    if (flat) {
+      input.connect(strandGain);
+>>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
     } else {
       BANDS.forEach((b, i) => {
         if (s.bands[i] <= 0.001) return;
@@ -199,6 +254,7 @@ export class OrbAudio {
         g.gain.value = s.bands[i] * (b.type === 'bandpass' ? 1.6 : 1);
         input.connect(f);
         f.connect(g);
+<<<<<<< HEAD
         g.connect(out);
       });
     }
@@ -225,12 +281,19 @@ export class OrbAudio {
       }
     }
 
+=======
+        g.connect(strandGain);
+      });
+    }
+
+>>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
     if (s.fx.trem > 0) {
       const lfo = ctx.createOscillator();
       const depth = ctx.createGain();
       lfo.frequency.value = s.fx.trem;
       depth.gain.value = 0.42;
       lfo.connect(depth);
+<<<<<<< HEAD
       depth.connect(out.gain);
       lfo.start();
       gen.active.push({ stop: () => { try { lfo.stop(); } catch {} } });
@@ -314,11 +377,59 @@ export class OrbAudio {
         for (const n of strand.nodes) { try { n.stop(); n.disconnect(); } catch {} }
         try { chain.input.disconnect(); chain.out.disconnect(); chain.tail.disconnect(); } catch {}
       },
+=======
+      depth.connect(strandGain.gain);
+      lfo.start();
+      this.active.push({ stop: () => { try { lfo.stop(); } catch {} } });
+    }
+
+    strandGain.connect(this.master);
+    if (s.fx.verb > 0.01) {
+      const send = ctx.createGain();
+      send.gain.value = s.fx.verb;
+      strandGain.connect(send);
+      send.connect(this.reverbIn);
+    }
+
+    // Long fade-in: windows should seep in, not cut in.
+    const t = ctx.currentTime;
+    strandGain.gain.setValueAtTime(0.0001, t);
+    strandGain.gain.exponentialRampToValueAtTime(Math.max(0.02, s.g), t + 1.8);
+    return { input, strandGain };
+  }
+
+  async startStrand(src, comp, s) {
+    const buf = s.fx.rev ? await this.reversed(src.url) : await this.buffer(src.url);
+    const dur = buf.duration;
+    // A reversed buffer needs its window mirrored too.
+    let start = s.fx.rev ? dur - comp.end : comp.start;
+    let end = s.fx.rev ? dur - comp.start : comp.end;
+    start = Math.max(0, Math.min(start, dur - 0.2));
+    end = Math.max(start + 0.4, Math.min(end, dur));
+
+    const node = this.ctx.createBufferSource();
+    node.buffer = buf;
+    node.loop = true;
+    node.loopStart = start;
+    node.loopEnd = end;
+    node.playbackRate.value = s.fx.rate || 1;
+
+    const { input, strandGain } = this.buildChain(s);
+    node.connect(input);
+    node.start(this.ctx.currentTime, start);
+    this.active.push({
+      stop: () => { try { node.stop(); } catch {} node.disconnect(); strandGain.disconnect(); },
+      gain: strandGain,
+>>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
     });
   }
 
   /** For containers the decoder refuses -- route a hidden element instead. */
+<<<<<<< HEAD
   startElementStrand(gen, src, comp, s, index, total) {
+=======
+  startElementStrand(src, comp, s) {
+>>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
     const el = document.createElement(src.kind === 'video' ? 'video' : 'audio');
     el.src = src.url;
     el.crossOrigin = 'anonymous';
@@ -327,6 +438,7 @@ export class OrbAudio {
     el.style.display = 'none';
     document.body.appendChild(el);
     const node = this.ctx.createMediaElementSource(el);
+<<<<<<< HEAD
     const chain = this.buildChain(gen, s, index, total);
     const env = this.ctx.createGain();
     env.gain.value = 0.0001;
@@ -372,13 +484,29 @@ export class OrbAudio {
         try { node.disconnect(); env.disconnect(); chain.input.disconnect(); chain.tail.disconnect(); } catch {}
         el.remove();
       },
+=======
+    const { input, strandGain } = this.buildChain(s);
+    node.connect(input);
+    el.playbackRate = s.fx.rate || 1;
+    const loop = () => { if (el.currentTime >= comp.end || el.currentTime < comp.start - 0.5) el.currentTime = comp.start; };
+    el.addEventListener('loadedmetadata', () => { el.currentTime = comp.start; el.play().catch(() => {}); });
+    el.addEventListener('timeupdate', loop);
+    this.active.push({
+      stop: () => { el.pause(); el.removeEventListener('timeupdate', loop); node.disconnect(); strandGain.disconnect(); el.remove(); },
+      gain: strandGain,
+>>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
     });
   }
 
   stopStrands() {
+<<<<<<< HEAD
     for (const g of this.gens) this.disposeGen(g);
     this.gens = [];
     this.gen = null;
+=======
+    for (const a of this.active) { try { a.stop(); } catch {} }
+    this.active = [];
+>>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
   }
 
   stop(fade = 0.6) {

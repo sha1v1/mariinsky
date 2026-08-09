@@ -1,7 +1,10 @@
 // Renders one image-layer component into a canvas. Layers are static, so each
 // one is built once and cached -- animation is only ever transform/opacity.
 import { smoothstep } from './analyze.js';
+<<<<<<< HEAD
 import { applyShader, shaderKey } from './shaders.js';
+=======
+>>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 
 const imgCache = new Map();
 const layerCache = new Map();
@@ -19,10 +22,17 @@ export function loadImage(url) {
   return p;
 }
 
+<<<<<<< HEAD
 export function layerCanvas(orb, compId, maxPx = 880, shader = null) {
   const key = `${orb.id}:${compId}:${maxPx}:${shaderKey(shader)}`;
   if (layerCache.has(key)) return layerCache.get(key);
   const p = build(orb, compId, maxPx, shader).catch((err) => {
+=======
+export function layerCanvas(orb, compId, maxPx = 880) {
+  const key = `${orb.id}:${compId}:${maxPx}`;
+  if (layerCache.has(key)) return layerCache.get(key);
+  const p = build(orb, compId, maxPx).catch((err) => {
+>>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
     layerCache.delete(key);
     throw err;
   });
@@ -30,6 +40,7 @@ export function layerCanvas(orb, compId, maxPx = 880, shader = null) {
   return p;
 }
 
+<<<<<<< HEAD
 /**
  * The lab changes shader settings faster than the cache should keep up with, so
  * it prunes as it goes -- otherwise dragging one slider parks a few hundred
@@ -58,6 +69,11 @@ async function build(orb, compId, maxPx, shader) {
     return applyShader(c, shader);
   }
 
+=======
+async function build(orb, compId, maxPx) {
+  const comp = orb.components[compId];
+  const src = orb.sources[comp.src];
+>>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
   const img = await loadImage(src.url);
   const scale = Math.min(maxPx / img.naturalWidth, maxPx / img.naturalHeight, 1);
   const w = Math.max(2, Math.round(img.naturalWidth * scale));
@@ -70,7 +86,11 @@ async function build(orb, compId, maxPx, shader) {
 
   if (comp.mode === 'shard') {
     maskShard(ctx, comp, w, h);
+<<<<<<< HEAD
     return applyShader(c, shader);
+=======
+    return c;
+>>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
   }
 
   const image = ctx.getImageData(0, 0, w, h);
@@ -122,7 +142,11 @@ async function build(orb, compId, maxPx, shader) {
   }
 
   ctx.putImageData(image, 0, 0);
+<<<<<<< HEAD
   return applyShader(c, shader);
+=======
+  return c;
+>>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 }
 
 function maskShard(ctx, comp, w, h) {

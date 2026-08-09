@@ -1,7 +1,11 @@
 // A marble takes its colour from the marbles already on the wall. The pick is
 // deterministic -- seeded by the memory's own id -- so a marble looks the same
 // on every load and for every visitor, but *which* colours are available
+<<<<<<< HEAD
 // depends on what the collection already holds. The wall's palette therefore
+=======
+// depends on what the garden already holds. The wall's palette therefore
+>>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 // inherits from itself and drifts, the way a real jar of marbles does.
 //
 // This module is imported by both the browser and the server, so it must stay

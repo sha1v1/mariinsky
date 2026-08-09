@@ -1,7 +1,11 @@
 // Memory text -> musical parameters. Ported from memory-symphony's
 // EmotionMapper.ts, with two additions: the matched keywords are returned so
 // the interface can show its working, and every profile carries a hue used to
+<<<<<<< HEAD
 // tint the emotion in the collection's data panel.
+=======
+// tint the emotion in the garden's data panel.
+>>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 //
 // There is no model behind this. It is a keyword score against five profiles,
 // which is exactly why it can be explained to someone in one sentence.
@@ -143,7 +147,11 @@ export function explain(analysis) {
   return `${words} → ${analysis.emotion} → ${analysis.instruments.join(' and ')} at ${analysis.tempo} bpm`;
 }
 
+<<<<<<< HEAD
 /** The chord bed for the collection as a whole, from every memory in it. */
+=======
+/** The chord bed for the garden as a whole, from every memory in it. */
+>>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 export function wallChords(emotions) {
   const tally = {};
   for (const e of emotions) tally[e] = (tally[e] || 0) + 1;

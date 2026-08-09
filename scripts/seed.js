@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 // Puts a handful of memories in the collection so the wall is not empty the first
+=======
+// Puts a handful of memories in the garden so the wall is not empty the first
+>>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 // time it is opened, and backfills any memory that predates the marble and
 // emotion fields. Safe to run more than once: it never duplicates a seed and
 // never touches a memory somebody actually contributed.
@@ -10,7 +14,10 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { splitText } from '../public/js/analyze.js';
 import { textComponents } from '../public/js/components.js';
+<<<<<<< HEAD
 import { defaults as defaultSettings } from '../public/js/settings.js';
+=======
+>>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 import { analyzeMemory } from '../public/js/emotion.js';
 import { marbleColor } from '../public/js/marble.js';
 
@@ -69,10 +76,14 @@ let when = Date.now() - SEEDS.length * 5 * 3600 * 1000;
 for (const text of SEEDS) {
   if (seeded.has(text.split('\n')[0].slice(0, 110))) continue;
   const id = crypto.randomBytes(6).toString('hex');
+<<<<<<< HEAD
   const settings = defaultSettings();
   // Shredding bites once, at creation, so the limits have to come from the
   // recipe the memory is being born with rather than from replay.
   const frags = splitText(text, { maxWords: settings.text.maxWords, maxChars: settings.text.maxChars });
+=======
+  const frags = splitText(text);
+>>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
   const analysis = analyzeMemory(text);
   const orb = {
     id,
@@ -84,10 +95,15 @@ for (const text of SEEDS) {
     emotion: analysis.emotion,
     analysis,
     decay: 0,
+<<<<<<< HEAD
     strain: 0,
     sources: { txt1: { kind: 'text', text, label: 'what was written' } },
     components: textComponents('txt1', frags),
     settings,
+=======
+    sources: { txt1: { kind: 'text', text, label: 'what was written' } },
+    components: textComponents('txt1', frags),
+>>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
     versions: [],
   };
   await fsp.writeFile(path.join(ORBS, `${id}.json`), JSON.stringify(orb));

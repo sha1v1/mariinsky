@@ -1,9 +1,17 @@
 {
+<<<<<<< HEAD
   "name": "mariinsky",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "a memory collective — an i-spy wall of memories that come back different, and fade, every time they are looked at",
+=======
+  "name": "mariisnky",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "i-spy memory garden — a shared wall of memories that fade as they are looked at",
+>>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
