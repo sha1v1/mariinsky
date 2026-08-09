@@ -162,8 +162,6 @@ async function route() {
   await ensureGarden();
 }
 
-window.__audit = { scape, orbAudio, garden: () => garden, orb: () => orb };  // TEMP DEBUG — remove
-
 shell();
 window.addEventListener('hashchange', route);
 route();
