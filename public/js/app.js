@@ -8,9 +8,32 @@
 import { Audioscape } from './audioscape.js';
 import { OrbAudio } from './orbaudio.js';
 import { Garden } from './garden.js';
-import { Contribute } from './contribute.js';
-import { OrbView } from './orbview.js';
-import { LabView } from './lab.js';
+
+/**
+ * Only the collection is needed to open the page. The two things you can do
+ * *to* it -- open a memory, leave one -- are fetched when you actually go
+ * there. That halves what has to arrive intact before anything is on screen,
+ * so a request dropped on the way to the laboratory costs the laboratory
+ * rather than the wall.
+ */
+const VIEWS = {
+  orb: () => import('./orbview.js').then((m) => m.OrbView),
+  lab: () => import('./lab.js').then((m) => m.LabView),
+  add: () => import('./contribute.js').then((m) => m.Contribute),
+};
+
+async function view(name) {
+  try {
+    return await VIEWS[name]();
+  } catch {
+    // A module that fails to fetch stays failed for the life of the document --
+    // the browser remembers the failure and will not go back for it -- so there
+    // is nothing to retry against here. Only a fresh document will do.
+    window.__toast?.('that part of the page did not arrive. fetching it again…');
+    setTimeout(() => window.__recover?.('a piece of the page did not arrive.'), 1200);
+    return null;
+  }
+}
 
 const root = document.getElementById('app');
 const overlay = document.getElementById('overlay');
@@ -136,6 +159,10 @@ async function route() {
   // nothing but the fetch.
   if (hash.startsWith('#/orb/') || hash.startsWith('#/lab/')) {
     const bench = hash.startsWith('#/lab/');
+    // Fetched before anything is torn down, so a view that never arrives leaves
+    // the collection exactly as it was.
+    const View = await view(bench ? 'lab' : 'orb');
+    if (!View) return;
     await ensureGarden();
     closeOverlay();
     overlay.classList.add('on');
@@ -145,7 +172,6 @@ async function route() {
     // any more -- it is the whole screen. The contribution card, which really
     // is a card laid over the collection, keeps its frame.
     document.body.classList.add('immersive');
-    const View = bench ? LabView : OrbView;
     orb = new View(overlay, orbAudio, scape, session);
     try {
       await orb.open(hash.slice(6));
@@ -158,6 +184,8 @@ async function route() {
   }
 
   if (hash === '#/add') {
+    const Contribute = await view('add');
+    if (!Contribute) return;
     await ensureGarden();
     closeOverlay();
     overlay.classList.add('on');
@@ -175,5 +203,9 @@ async function route() {
 }
 
 shell();
+// The graph arrived and evaluated. Whatever the routing does next, the page is
+// no longer at risk of sitting on "…" for ever, so the boot watchdog stands
+// down and the reload counter is cleared.
+window.__booted?.();
 window.addEventListener('hashchange', route);
 route();

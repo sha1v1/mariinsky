@@ -14,6 +14,29 @@ import { trinketFor, trinketEl } from './trinkets.js';
 
 const HOVER_DWELL = 170;   // ms before a marble starts sounding
 
+/**
+ * The wall is the one fetch the collection cannot do without, and a deploy or
+ * an instance move can drop a request for a second or two. A short retry is the
+ * whole difference between "the wall is empty" and "the wall is still there".
+ *
+ * Returns null -- distinctly from [] -- when it genuinely could not be read.
+ */
+async function fetchWall(tries = 3) {
+  for (let i = 0; i < tries; i++) {
+    try {
+      const res = await fetch('/api/wall', { cache: 'no-store' });
+      if (!res.ok) throw new Error(`wall answered ${res.status}`);
+      const data = await res.json();
+      if (!Array.isArray(data)) throw new Error('wall malformed');
+      return data;
+    } catch {
+      if (i === tries - 1) return null;
+      await new Promise((r) => setTimeout(r, 400 * 2 ** i));
+    }
+  }
+  return null;
+}
+
 export class Garden {
   constructor(root, scape, session) {
     this.root = root;
@@ -43,8 +66,13 @@ export class Garden {
     this.wallEl = this.root.querySelector('[data-role=wall]');
     this.clutterEl = this.root.querySelector('[data-role=clutter]');
 
-    this.wall = await fetch('/api/wall').then((r) => r.json()).catch(() => []);
+    const wall = await fetchWall();
+    // A wall that could not be read is not an empty wall. Drawing nothing here
+    // would say "there are no memories", which is both false and the single
+    // most alarming thing this page could tell anyone who left one.
+    this.wall = wall || [];
     this.draw();
+    if (!wall) this.stalled();
     this.pollTimer = setInterval(() => this.refresh(), 15000);
 
     this.scape.setBed();
@@ -362,9 +390,24 @@ export class Garden {
 
   // ---------------------------------------------------------------- upkeep --
 
+  /**
+   * Said out loud rather than drawn as an empty page, and left to the poll to
+   * clear itself -- the wall usually comes back on its own within a tick.
+   */
+  stalled() {
+    if (this.root.querySelector('[data-role=stall]')) return;
+    this.root.insertAdjacentHTML('beforeend', `
+      <div class="stall" data-role="stall" role="status">
+        <p>the collection did not answer just now. nothing is lost — still trying.</p>
+        <button class="btn" data-act="retry">try again</button>
+      </div>`);
+    this.root.querySelector('[data-act=retry]').addEventListener('click', () => this.refresh());
+  }
+
   async refresh() {
-    const wall = await fetch('/api/wall').then((r) => r.json()).catch(() => null);
+    const wall = await fetchWall(1);
     if (!wall || !this.wallEl?.isConnected) return;
+    this.root.querySelector('[data-role=stall]')?.remove();
     const changed = wall.length !== this.wall.length
       || wall.some((m, i) => m.id !== this.wall[i]?.id || m.decay !== this.wall[i]?.decay);
     this.wall = wall;

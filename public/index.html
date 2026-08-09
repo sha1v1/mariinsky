@@ -16,6 +16,70 @@
 <body>
   <div id="app"><div class="loading">…</div></div>
   <div id="overlay"></div>
+  <script>
+  // A single dropped request used to leave this page on "…" for ever. An ES
+  // module graph that fails to fetch is never retried, and the failure is
+  // remembered for the life of the document, so the only reliable cure is a
+  // fresh document. Boot failures therefore reload -- a bounded number of
+  // times, so a genuinely broken deploy ends in a sentence rather than a loop.
+  (function () {
+    var KEY = 'mariinsky:boot-retries';
+    var MAX = 2;
+    var WAIT = 15000;
+    var settled = false;
+    var timer = null;
+    var tries = 0;
+    try { tries = parseInt(sessionStorage.getItem(KEY), 10) || 0; } catch (e) {}
+
+    function forget() { try { sessionStorage.removeItem(KEY); } catch (e) {} }
+
+    window.__booted = function () {
+      settled = true;
+      clearTimeout(timer);
+      forget();
+    };
+
+    window.__recover = function (why) {
+      if (settled && !why) return;
+      settled = true;
+      clearTimeout(timer);
+      if (tries >= MAX) return giveUp(why);
+      try { sessionStorage.setItem(KEY, String(tries + 1)); } catch (e) {}
+      location.reload();
+    };
+
+    function giveUp(why) {
+      forget();
+      var app = document.getElementById('app');
+      if (!app) return;
+      app.innerHTML =
+        '<div class="loading">'
+        + '<p data-role="why"></p>'
+        + '<p class="loading-aside">the memories are safe; this page just could not finish loading.</p>'
+        + '<button class="btn" data-act="boot-retry">try again</button>'
+        + '</div>';
+      app.querySelector('[data-role=why]').textContent = why || 'the collection could not be reached.';
+      app.querySelector('[data-act=boot-retry]').addEventListener('click', function () {
+        location.reload();
+      });
+    }
+
+    // A module script that cannot fetch itself or one of its dependencies fires
+    // `error` on the element, not as a script error, so it is caught here.
+    window.addEventListener('error', function (e) {
+      var el = e.target;
+      if (el && el !== window && el.tagName === 'SCRIPT' && el.type === 'module') {
+        window.__recover('a piece of the page did not arrive.');
+      }
+    }, true);
+
+    // Nothing failed outright, but nothing booted either -- a stalled fetch
+    // looks exactly like the old silent "…", so it is treated the same way.
+    timer = setTimeout(function () {
+      if (!settled) window.__recover('the collection is taking too long to answer.');
+    }, WAIT);
+  })();
+  </script>
   <script type="module" src="/js/app.js"></script>
 </body>
 </html>
