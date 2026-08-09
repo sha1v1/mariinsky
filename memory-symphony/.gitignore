@@ -1,0 +1,9 @@
+node_modules
+dist
+.DS_Store
+*.log
+
+# Secrets — never commit. The Anthropic API key lives here and only here.
+.env
+.env.local
+.env.*.local

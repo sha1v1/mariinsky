@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($p = \"C:\\\\Users\\\\Arnav\\\\Desktop\\\\memory-symphony\\\\package-lock.json\"; try { $j = Get-Content $p -Raw | ConvertFrom-Json; Write-Output \"JSON parses OK\" } catch { Write-Output \"JSON PARSE FAILED: $\\($_.Exception.Message\\)\"; exit }; $bad = @\\(\\); foreach \\($k in $j.packages.PSObject.Properties\\) { if \\($k.Name -match '[^\\\\x20-\\\\x7e]'\\) { $bad += \"MANGLED KEY: $\\($k.Name -replace '[^\\\\x20-\\\\x7e]','<?>'\\)\" }; if \\($k.Name -ne '' -and $null -eq $k.Value.version\\) { $bad += \"NO VERSION: $\\($k.Name\\)\" } }; if \\($bad\\) { $bad } else { Write-Output \"no structural problems found\" })",
+      "PowerShell(npm install 2>&1)",
+      "PowerShell($root = \"C:\\\\Users\\\\Arnav\\\\Desktop\\\\memory-symphony\\\\node_modules\"; Get-ChildItem \"$root\\\\@esbuild\" -ErrorAction SilentlyContinue | ForEach-Object { $exe = Join-Path $_.FullName \"esbuild.exe\"; \"{0}  binary: {1}\" -f $_.Name, \\(Test-Path $exe\\) }; \"---\"; foreach \\($b in @\\(\"vite\",\"tsx\",\"concurrently\"\\)\\) { \"{0}: {1}\" -f $b, \\(Test-Path \"$root\\\\.bin\\\\$b.cmd\"\\) }; \"---\"; foreach \\($d in @\\(\"@anthropic-ai\\\\sdk\",\"express\",\"dotenv\"\\)\\) { \"{0}: {1}\" -f $d, \\(Test-Path \"$root\\\\$d\\\\package.json\"\\) })"
+    ]
+  }
+}
