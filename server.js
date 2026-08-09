@@ -40,7 +40,6 @@ async function allOrbs() {
   return out.sort((a, b) => a.createdAt - b.createdAt);
 }
 
-<<<<<<< HEAD
 /**
  * Orb writes are read-modify-write, and a shared wall gets concurrent openings.
  * Two of them landing together used to interleave: the shorter payload
@@ -74,8 +73,6 @@ function withOrb(id, fn) {
   return next;
 }
 
-=======
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 // ffmpeg is a fallback only: it is used when the browser reports it cannot
 // decode a file at all. Anything the browser can already play is left alone.
 let FFMPEG = null;
@@ -232,11 +229,7 @@ async function backfill(orbs) {
   for (const orb of orbs) {
     if (!orb.marble) {
       orb.marble = marbleColor(orb.id, palette.slice());
-<<<<<<< HEAD
       await writeOrb(orb);
-=======
-      await fsp.writeFile(orbFile(orb.id), JSON.stringify(orb));
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
       dirty = true;
     }
     palette.push(orb.marble);
@@ -345,7 +338,6 @@ app.post('/api/orbs', reserveOrb, upload.array('files'), async (req, res) => {
     emotion: String(manifest.emotion || 'neutral').slice(0, 20),
     analysis: manifest.analysis || null,
     decay: 0,
-<<<<<<< HEAD
     // What past sittings wore off permanently, on top of the opening count.
     strain: 0,
     sources,
@@ -357,14 +349,6 @@ app.post('/api/orbs', reserveOrb, upload.array('files'), async (req, res) => {
   };
 
   await writeOrb(orb);
-=======
-    sources,
-    components: manifest.components || {},
-    versions: [],
-  };
-
-  await fsp.writeFile(orbFile(orb.id), JSON.stringify(orb));
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
   res.json({ id: orb.id, marble: orb.marble });
 });
 
@@ -377,7 +361,6 @@ app.get('/api/orbs/:id', async (req, res) => {
 // A new version is composed in the browser (that is where the RNG and the
 // renderer live); the server appends the recipe and tracks the decay.
 app.post('/api/orbs/:id/versions', async (req, res) => {
-<<<<<<< HEAD
   const v = req.body?.version;
   // A collage version carries its whole arrangement; a sequence carries a seed
   // and is generated back out of it. Both are versions.
@@ -430,20 +413,6 @@ async function writeBack(req, res) {
 
 const clamp01 = (v) => Math.max(0, Math.min(0.94, v));
 
-=======
-  const orb = await readOrb(req.params.id);
-  if (!orb) return res.status(404).json({ error: 'no such orb' });
-  const v = req.body?.version;
-  if (!v || !Array.isArray(v.plates)) return res.status(400).json({ error: 'malformed version' });
-  v.n = orb.versions.length + 1;
-  v.at = Date.now();
-  orb.versions.push(v);
-  orb.decay = typeof v.decay === 'number' ? v.decay : orb.decay;
-  await fsp.writeFile(orbFile(orb.id), JSON.stringify(orb));
-  res.json({ n: v.n, at: v.at, decay: orb.decay });
-});
-
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 // The garden is a shared wall, so a memory can only be pulled out of it with
 // the moderation key -- not by whoever happens to be looking at it.
 app.delete('/api/orbs/:id', async (req, res) => {
@@ -470,10 +439,6 @@ sweepPrep();
 
 const PORT = process.env.PORT || 5173;
 app.listen(PORT, () => {
-<<<<<<< HEAD
   console.log(`\n  mariinsky  →  http://localhost:${PORT}`);
-=======
-  console.log(`\n  mariisnky  →  http://localhost:${PORT}`);
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
   console.log(`  ffmpeg fallback: ${FFMPEG || 'not installed (undecodable files will be skipped)'}\n`);
 });

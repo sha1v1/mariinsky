@@ -1,7 +1,6 @@
 // Composes the next version of an orb: which components survive, which have
 // been lost, which one comes roaring back. Output is a small JSON recipe that
 // the renderer (and the history timeline) can replay exactly.
-<<<<<<< HEAD
 //
 // Every number that used to be a literal in here now comes from the orb's
 // settings, and almost all of them are *ranges* -- the composer still rolls,
@@ -17,16 +16,6 @@ import { defaults, normalize, get, sub, pick } from './settings.js';
  */
 export function idsOf(version) {
   const ids = new Set(version.seen || []);
-=======
-import { mulberry32, seed32, range, chance, clamp, r3, shuffle, pickWeighted } from './rng.js';
-
-const CAPS = { imageLayer: 7, videoPortion: 4, textFragment: 8, audioWindow: 3 };
-const BLENDS = ['normal', 'screen', 'lighten', 'soft-light'];
-
-/** Every component id referenced anywhere in a stored version. */
-export function idsOf(version) {
-  const ids = new Set();
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
   for (const p of version.plates || []) {
     if (p.k === 'image') for (const l of p.layers) ids.add(l.c);
     else if (p.k === 'video') ids.add(p.c);
@@ -36,7 +25,6 @@ export function idsOf(version) {
   return ids;
 }
 
-<<<<<<< HEAD
 /** The orb's own recipe, or the schema defaults if it has never been to the lab. */
 export function settingsOf(orb) {
   return orb?.settings ? normalize(orb.settings) : defaults();
@@ -58,10 +46,6 @@ export function decayFor(n) {
 
 /** Versions elapsed since each component last appeared. Never-seen ranks high. */
 export function dormancyMap(orb) {
-=======
-/** Versions elapsed since each component last appeared. Never-seen ranks high. */
-function dormancyMap(orb) {
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
   const seen = new Map();
   orb.versions.forEach((v, i) => { for (const id of idsOf(v)) seen.set(id, i + 1); });
   const total = orb.versions.length;
@@ -72,7 +56,6 @@ function dormancyMap(orb) {
   return map;
 }
 
-<<<<<<< HEAD
 /**
  * Image layers come in two flavours: the ones measured off the photo's own
  * histogram, and the ones a decomposition model carved out semantically. The
@@ -132,31 +115,10 @@ export function composeVersion(orb, settings, opts = {}) {
   const dorm = dormancyMap(orb);
   const prevIds = prev ? idsOf(prev) : new Set();
   const visible = (id) => !hidden.has(id);
-=======
-function byKind(orb) {
-  const groups = { imageLayer: [], videoPortion: [], textFragment: [], audioWindow: [] };
-  for (const [id, c] of Object.entries(orb.components)) {
-    if (groups[c.kind]) groups[c.kind].push(id);
-  }
-  return groups;
-}
-
-export function composeVersion(orb) {
-  const prev = orb.versions.at(-1) || null;
-  const seed = seed32();
-  const rng = mulberry32(seed);
-  const first = !prev;
-  const decay = first ? 0 : clamp(prev.decay + 0.035 + rng() * 0.05, 0, 0.94);
-
-  const groups = byKind(orb);
-  const dorm = dormancyMap(orb);
-  const prevIds = prev ? idsOf(prev) : new Set();
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 
   // --- the vivid flash -------------------------------------------------
   // Something that has been gone a long time can surface at full clarity while
   // the rest of the memory stays faded. Longer absence, likelier the return.
-<<<<<<< HEAD
   const flashBias = get(s, 'global.flashChance');
   const pool = Object.keys(orb.components).filter(visible);
   const longGone = pool.filter((id) => dorm.get(id) >= 5);
@@ -164,12 +126,6 @@ export function composeVersion(orb) {
     (chance(rng, flashBias * 0.5) || (longGone.length > 0 && chance(rng, flashBias)));
   const flashPool = longGone.length ? longGone : pool;
   const flashed = flash && flashPool.length
-=======
-  const longGone = Object.keys(orb.components).filter((id) => dorm.get(id) >= 5);
-  const flash = !first && (chance(rng, 0.14) || (longGone.length > 0 && chance(rng, 0.28)));
-  const flashPool = longGone.length ? longGone : Object.keys(orb.components);
-  const flashed = flash
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
     ? pickWeighted(rng, flashPool, (id) => dorm.get(id) + 1, chance(rng, 0.4) ? 2 : 1)
     : [];
   const isFlashed = new Set(flashed);
@@ -180,21 +136,12 @@ export function composeVersion(orb) {
     if (!ids.length) { chosen[kind] = []; continue; }
     let keep;
     if (first) {
-<<<<<<< HEAD
       keep = shuffle(rng, ids).filter(() => chance(rng, survival * 0.7));
     } else {
       keep = ids.filter((id) => {
         if (prevIds.has(id)) return chance(rng, survival * (1 - decay * 0.45));
         // A dormant piece claws its way back with rising probability.
         return chance(rng, clawback * (0.17 + Math.min(1, dorm.get(id) * 0.13)));
-=======
-      keep = shuffle(rng, ids).filter(() => chance(rng, 0.58));
-    } else {
-      keep = ids.filter((id) => {
-        if (prevIds.has(id)) return chance(rng, 1 - (0.17 + decay * 0.45));
-        // A dormant piece claws its way back with rising probability.
-        return chance(rng, 0.05 + Math.min(0.4, dorm.get(id) * 0.04));
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
       });
     }
     for (const id of ids) if (isFlashed.has(id) && !keep.includes(id)) keep.push(id);
@@ -203,11 +150,7 @@ export function composeVersion(orb) {
     // every medium it was made of. After that, whole senses can drop out.
     if (!keep.length && (decay < 0.6 || chance(rng, 0.5))) keep.push(shuffle(rng, ids)[0]);
 
-<<<<<<< HEAD
     chosen[kind] = shuffle(rng, keep).slice(0, caps[kind]);
-=======
-    chosen[kind] = shuffle(rng, keep).slice(0, CAPS[kind]);
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
   }
 
   const visuals = chosen.imageLayer.length + chosen.videoPortion.length;
@@ -228,7 +171,6 @@ export function composeVersion(orb) {
   }
 
   const textFrags = shuffle(rng, chosen.textFragment);
-<<<<<<< HEAD
   const blockCap = get(s, 'text.blocks');
   const textPlateCount = textFrags.length
     ? clamp(Math.ceil(textFrags.length / (1 + Math.floor(rng() * 3))), 1, blockCap)
@@ -293,55 +235,20 @@ export function composeVersion(orb) {
         if (zb == null) return -1;
         return za - zb;
       }).map((id) => {
-=======
-  const textPlateCount = textFrags.length ? clamp(Math.ceil(textFrags.length / (1 + Math.floor(rng() * 3))), 1, 3) : 0;
-
-  const plateCount = imageBySrc.size + chosen.videoPortion.length + textPlateCount;
-  const place = placer(rng, plateCount);
-  const plates = [];
-
-  const decayBlur = (id) => (isFlashed.has(id) ? 0 : r3(decay * 3.2 + range(rng, 0, 1.1)));
-  const decayOpacity = (id, lo, hi) =>
-    isFlashed.has(id) ? 1 : r3(clamp(range(rng, lo, hi) * (1 - decay * 0.4), 0.06, 1));
-
-  for (const [src, layerIds] of imageBySrc) {
-    const anyFlashed = layerIds.some((id) => isFlashed.has(id));
-    const size = r3(range(rng, 0.3, 0.56) * (anyFlashed ? 1.12 : 1));
-    const ratio = aspect(orb.sources[src], 0.7);
-    const s = place(size / 2, (size * ratio) / 2);
-    plates.push({
-      k: 'image', src,
-      x: s.x, y: s.y,
-      s: size,
-      r: r3(range(rng, -9, 9) * (1 + decay)),
-      o: anyFlashed ? 1 : r3(clamp(range(rng, 0.7, 1) * (1 - decay * 0.3), 0.1, 1)),
-      blur: anyFlashed ? 0 : r3(decay * 2.4 + range(rng, 0, 0.7)),
-      z: r3(range(rng, 0, 1)),
-      layers: shuffle(rng, layerIds).map((id) => {
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
         const comp = orb.components[id];
         const hint = comp.hint || 'normal';
         return {
           c: id,
-<<<<<<< HEAD
           o: fade(id, 'image.opacity'),
           b: chance(rng, 1 - chaos) ? hint : blendPool[Math.floor(rng() * blendPool.length)],
           blur: decayBlur(id, 'image.blur'),
           dx: r3(range(rng, -spread, spread) * (1 + decay * 2)),
           dy: r3(range(rng, -spread, spread) * (1 + decay * 2)),
-=======
-          o: decayOpacity(id, 0.55, 1),
-          b: chance(rng, 0.72) ? hint : BLENDS[Math.floor(rng() * BLENDS.length)],
-          blur: decayBlur(id),
-          dx: r3(range(rng, -0.04, 0.04) * (1 + decay * 2)),
-          dy: r3(range(rng, -0.04, 0.04) * (1 + decay * 2)),
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
         };
       }),
     });
   }
 
-<<<<<<< HEAD
   // --- video plates ---
   const flickerDepth = sub(s, 'video.flicker', 'depth');
   const flickerSpec = flickerDepth <= 0.001 ? null : {
@@ -373,30 +280,11 @@ export function composeVersion(orb) {
   }
 
   // --- text plates ---
-=======
-  for (const id of chosen.videoPortion) {
-    const size = r3(range(rng, 0.2, 0.4) * (isFlashed.has(id) ? 1.2 : 1));
-    const ratio = aspect(orb.sources[orb.components[id].src], 0.56);
-    const s = place(size / 2, (size * ratio) / 2);
-    plates.push({
-      k: 'video', c: id,
-      x: s.x, y: s.y,
-      s: size,
-      r: r3(range(rng, -7, 7) * (1 + decay)),
-      o: decayOpacity(id, 0.6, 1),
-      blur: decayBlur(id),
-      b: chance(rng, 0.75) ? 'normal' : 'screen',
-      z: r3(range(rng, 0, 1)),
-    });
-  }
-
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
   if (textPlateCount) {
     const chunks = Array.from({ length: textPlateCount }, () => []);
     // Fragments are dealt round-robin, so one block can hold lines that came
     // from three different cards. That is the cross-contamination.
     textFrags.forEach((id, i) => chunks[i % textPlateCount].push(id));
-<<<<<<< HEAD
     const scaleRange = get(s, 'text.scale');
     for (const chunk of chunks) {
       if (!chunk.length) continue;
@@ -421,41 +309,17 @@ export function composeVersion(orb) {
             : pick(rng, s, 'text.scale')),
           em: chance(rng, get(s, 'text.emphasis')),
           blur: isFlashed.has(id) ? 0 : r3(pick(rng, s, 'text.blur') * (chance(rng, 0.5) ? 1 : 0)),
-=======
-    for (const chunk of chunks) {
-      if (!chunk.length) continue;
-      const width = r3(range(rng, 0.2, 0.33));
-      // Rough height: fragments wrap to roughly two lines each at these widths.
-      const s = place(width / 2, Math.min(0.3, 0.05 * chunk.length + 0.05), 0.44, 0.5);
-      plates.push({
-        k: 'text',
-        x: s.x, y: s.y,
-        w: width,
-        r: r3(range(rng, -5, 5) * (1 + decay * 0.6)),
-        o: r3(clamp(range(rng, 0.75, 1) * (1 - decay * 0.25), 0.15, 1)),
-        z: r3(range(rng, 0, 1)),
-        frags: chunk.map((id) => ({
-          c: id,
-          o: decayOpacity(id, 0.5, 1),
-          sc: r3(isFlashed.has(id) ? range(rng, 1.15, 1.5) : range(rng, 0.85, 1.25)),
-          em: chance(rng, 0.25),
-          blur: isFlashed.has(id) ? 0 : r3(decay * 1.6 * (chance(rng, 0.5) ? 1 : 0)),
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
         })),
       });
     }
   }
 
-<<<<<<< HEAD
   // The lab's "this take" pane hands back an explicit stacking order. When it
   // does, it wins outright -- that pane is for arranging a result by hand, not
   // for nudging the dice.
   if (opts.order instanceof Map && opts.order.size) applyOrder(plates, opts.order);
 
   const audio = composeAudio(orb, prev?.audio, groups.audioWindow, rng, decay, isFlashed, s);
-=======
-  const audio = composeAudio(orb, prev?.audio, groups.audioWindow, rng, decay, isFlashed);
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 
   return {
     n: orb.versions.length + 1,
@@ -469,7 +333,6 @@ export function composeVersion(orb) {
   };
 }
 
-<<<<<<< HEAD
 /** Plate identity for the reorder pane: stable across a re-render of one seed. */
 export function plateKey(p) {
   if (p.k === 'image') return `image:${p.src}`;
@@ -505,8 +368,6 @@ export function videoWindow(rng, s, comp, src) {
   return { start: r3(start), end: r3(Math.min(dur, start + len)) };
 }
 
-=======
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 const aspect = (src, fallback) => (src?.w && src?.h ? src.h / src.w : fallback);
 
 /**
@@ -514,11 +375,7 @@ const aspect = (src, fallback) => (src?.w && src?.h ? src.h / src.w : fallback);
  * instead of clumping. Each one is pushed no further from centre than its own
  * half-diagonal allows, so nothing gets guillotined by the glass.
  */
-<<<<<<< HEAD
 function placer(rng, count, scatter = 0.5) {
-=======
-function placer(rng, count) {
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
   const start = rng() * Math.PI * 2;
   const order = shuffle(rng, Array.from({ length: Math.max(1, count) }, (_, i) => i));
   let i = 0;
@@ -530,11 +387,7 @@ function placer(rng, count) {
     const k = order[i++ % order.length];
     const angle = start + (k / Math.max(1, count)) * Math.PI * 2 + range(rng, -0.3, 0.3);
     const limit = Math.max(0.04, edge - Math.hypot(halfW, halfH));
-<<<<<<< HEAD
     let rad = Math.sqrt(range(rng, inner, 1)) * Math.min(0.36, limit) * (scatter * 2);
-=======
-    let rad = Math.sqrt(range(rng, inner, 1)) * Math.min(0.36, limit);
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
     if (count === 1) rad *= 0.4;
     return {
       x: r3(clamp(0.5 + Math.cos(angle) * rad, 0.04, 0.96)),
@@ -547,7 +400,6 @@ function placer(rng, count) {
  * Audio mutation budget, per the brief: 70% of versions change *which windows*
  * play, 20% change the frequency bands, 10% reach for the tape effects. Decay
  * pressure is applied on top of whichever axis moved.
-<<<<<<< HEAD
  *
  * How a strand *sounds* -- distance, looping, fades -- is not recorded here.
  * That is settings, read live at playback, so turning a knob in the lab is
@@ -566,16 +418,6 @@ function composeAudio(orb, prevAudio, pool, rng, decay, isFlashed, s) {
   const drift = get(s, 'audio.pitchDrift');
   const trem = get(s, 'audio.tremolo');
   const rev = get(s, 'audio.reverseChance');
-=======
- */
-function composeAudio(orb, prevAudio, pool, rng, decay, isFlashed) {
-  if (!pool.length) return { strands: [] };
-
-  const live = new Set(pool);
-  let strands = (prevAudio?.strands || [])
-    .filter((s) => live.has(s.c))
-    .map((s) => ({ c: s.c, g: s.g, bands: [...s.bands], fx: { ...s.fx } }));
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 
   const fresh = (id) => ({
     c: id,
@@ -585,30 +427,17 @@ function composeAudio(orb, prevAudio, pool, rng, decay, isFlashed) {
   });
 
   if (!strands.length) {
-<<<<<<< HEAD
     const n = Math.min(maxStrands, chance(rng, 0.45) ? 2 : 1);
     for (const id of shuffle(rng, pool).slice(0, n)) strands.push(fresh(id));
-=======
-    for (const id of shuffle(rng, pool).slice(0, chance(rng, 0.45) ? 2 : 1)) strands.push(fresh(id));
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
   } else {
     const roll = rng();
     if (roll < 0.7) {
       // --- windowing: what you hear moves to a different moment ---------
-<<<<<<< HEAD
       const unused = pool.filter((id) => !strands.some((x) => x.c === id));
       const move = rng();
       if (move < 0.48 && unused.length) {
         strands[Math.floor(rng() * strands.length)].c = shuffle(rng, unused)[0];
       } else if (move < 0.76 && unused.length && strands.length < maxStrands) {
-=======
-      const unused = pool.filter((id) => !strands.some((s) => s.c === id));
-      const move = rng();
-      if (move < 0.48 && unused.length) {
-        const target = strands[Math.floor(rng() * strands.length)];
-        target.c = shuffle(rng, unused)[0];
-      } else if (move < 0.76 && unused.length && strands.length < 3) {
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
         strands.push(fresh(shuffle(rng, unused)[0]));
       } else if (strands.length > 1) {
         strands.splice(Math.floor(rng() * strands.length), 1);
@@ -619,65 +448,38 @@ function composeAudio(orb, prevAudio, pool, rng, decay, isFlashed) {
       // --- bands: a whole frequency range goes missing or comes back ----
       const target = strands[Math.floor(rng() * strands.length)];
       const b = Math.floor(rng() * 3);
-<<<<<<< HEAD
       target.bands[b] = target.bands[b] > 0.5 && chance(rng, dropout) ? r3(range(rng, 0, 0.25)) : 1;
-=======
-      target.bands[b] = target.bands[b] > 0.5 ? r3(range(rng, 0, 0.25)) : 1;
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
       if (target.bands.every((v) => v < 0.3)) target.bands[Math.floor(rng() * 3)] = 1;
     } else {
       // --- tape effects -------------------------------------------------
       const target = strands[Math.floor(rng() * strands.length)];
-<<<<<<< HEAD
       target.fx.rate = r3(clamp(1 + range(rng, -drift, drift), 0.6, 1.6));
       target.fx.rev = chance(rng, rev);
       target.fx.verb = r3(range(rng, 0.2, 0.65));
       target.fx.trem = chance(rng, trem) ? r3(range(rng, 1.5, 6.5)) : 0;
-=======
-      target.fx.rate = r3(clamp(1 + range(rng, -0.07, 0.07), 0.88, 1.12));
-      target.fx.rev = chance(rng, 0.35);
-      target.fx.verb = r3(range(rng, 0.2, 0.65));
-      target.fx.trem = chance(rng, 0.35) ? r3(range(rng, 1.5, 6.5)) : 0;
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
     }
   }
 
   // Decay thins the top end first and floods the room with reverb.
-<<<<<<< HEAD
   for (const x of strands) {
     x.g = r3(clamp(x.g * (1 - decay * 0.3), 0.18, 1));
     x.bands[2] = r3(clamp(x.bands[2] * (1 - decay * 0.55), 0, 1));
     x.bands[1] = r3(clamp(x.bands[1] * (1 - decay * 0.2), 0, 1));
     x.fx.verb = r3(clamp(Math.max(x.fx.verb, decay * 0.5), 0, 0.8));
-=======
-  for (const s of strands) {
-    s.g = r3(clamp(s.g * (1 - decay * 0.3), 0.18, 1));
-    s.bands[2] = r3(clamp(s.bands[2] * (1 - decay * 0.55), 0, 1));
-    s.bands[1] = r3(clamp(s.bands[1] * (1 - decay * 0.2), 0, 1));
-    s.fx.verb = r3(clamp(Math.max(s.fx.verb, decay * 0.5), 0, 0.8));
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
   }
 
   // A flashed window plays clean and loud, whatever state the rest is in.
   for (const id of isFlashed) {
     if (!live.has(id)) continue;
-<<<<<<< HEAD
     const existing = strands.find((x) => x.c === id);
-=======
-    const existing = strands.find((s) => s.c === id);
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
     const clean = { c: id, g: 0.95, bands: [1, 1, 1], fx: { rate: 1, rev: false, verb: 0.12, trem: 0 } };
     if (existing) Object.assign(existing, clean);
     else strands.unshift(clean);
   }
 
-<<<<<<< HEAD
   // Each strand gets its own window length inside the bias, so two strands
   // rarely breathe in step.
   for (const x of strands) x.len = r3(pick(rng, s, 'audio.windowLength'));
 
   return { strands: strands.slice(0, maxStrands) };
-=======
-  return { strands: strands.slice(0, 3) };
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 }

@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 // Inside one memory.
 //
 // The shell is the collection's: a sphere that grows out of the marble you
@@ -22,26 +21,6 @@ import { StreamPlayer } from './stream.js';
 import { get } from './settings.js';
 import { r3 } from './rng.js';
 import { EMOTION_HUE } from './emotion.js';
-=======
-// Inside one memory. Renders a version of it in the sphere, drives the history
-// timeline, and asks compose.js for a fresh version every time it is opened.
-//
-// Unchanged from the orb prototype apart from where it sits in the app: the
-// glow follows the memory's marble colour, the garden's audioscape is ducked
-// while you are in here so the memory's own decayed sound has the room, and
-// opening a memory hands it to the audioscape to be heard when you go back.
-
-import { layerCanvas } from './imagelayers.js';
-import { composeVersion, idsOf } from './compose.js';
-import { explain } from './emotion.js';
-
-const KIND_LABEL = {
-  imageLayer: 'image layer',
-  videoPortion: 'video portion',
-  textFragment: 'text fragment',
-  audioWindow: 'audio window',
-};
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 
 export class OrbView {
   constructor(root, audio, scape, session) {
@@ -53,10 +32,7 @@ export class OrbView {
     this.version = null;
     this.token = 0;
     this.videos = [];
-<<<<<<< HEAD
     this.timers = [];
-=======
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
     this.raf = null;
   }
 
@@ -64,7 +40,6 @@ export class OrbView {
     const res = await fetch(`/api/orbs/${id}`);
     if (!res.ok) throw new Error('orb not found');
     this.orb = await res.json();
-<<<<<<< HEAD
     this.settings = settingsOf(this.orb);
 
     // The collection keeps playing underneath, but this memory sits on top of
@@ -101,8 +76,10 @@ export class OrbView {
             <div class="glass"></div>
             <div class="rim"></div>
           </div>
-          <h2 class="orb-title">${esc(o.title)}</h2>
-          <p class="orb-sub" data-role="sub"></p>
+          <div class="orb-caption">
+            <h2 class="orb-title">${esc(o.title)}</h2>
+            <p class="orb-sub" data-role="sub"></p>
+          </div>
         </div>
       </div>`;
 
@@ -251,23 +228,6 @@ export class OrbView {
 
   // -------------------------------------------------------------- collage ---
 
-=======
-    document.body.classList.add('in-memory');
-
-    // The garden keeps playing behind you, just far away.
-    this.scape.duck(0.12, 1.2);
-
-    this.shell();
-    const version = composeVersion(this.orb);
-    await this.show(version);
-    await this.persist(version);
-
-    // Visiting a memory is what puts it into the shared audioscape. It swells
-    // in the garden when you come back out.
-    if (this.orb.analysis) this.session.queue(this.orb.analysis, this.orb.title);
-  }
-
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
   async persist(version) {
     const res = await fetch(`/api/orbs/${this.orb.id}/versions`, {
       method: 'POST',
@@ -280,102 +240,12 @@ export class OrbView {
     version.at = meta.at;
     this.orb.versions.push(version);
     this.orb.decay = meta.decay;
-<<<<<<< HEAD
   }
 
   async show(version) {
     const token = ++this.token;
     this.version = version;
     this.stopStream();
-=======
-    this.drawTimeline();
-  }
-
-  async again() {
-    const version = composeVersion(this.orb);
-    await this.show(version);
-    await this.persist(version);
-  }
-
-  shell() {
-    const o = this.orb;
-    this.root.innerHTML = `
-      <div class="orbscene" style="--glow:${o.marble || o.glow}">
-        <header class="hud">
-          <button class="btn" data-act="back">← the garden</button>
-          <div class="hud-title">
-            <h1>${esc(o.title)}</h1>
-            <p class="hud-sub" data-role="sub"></p>
-          </div>
-          <div class="hud-actions">
-            <button class="btn" data-act="reveal">what is left</button>
-            <button class="btn" data-act="mute">sound on</button>
-            <button class="btn btn-key" data-act="again">open it again</button>
-          </div>
-        </header>
-        <div class="stagewrap">
-          <div class="sphere" data-role="sphere">
-            <div class="collage" data-role="collage"></div>
-            <div class="grain"></div>
-            <div class="glass"></div>
-            <div class="rim"></div>
-          </div>
-          <div class="reveal" data-role="reveal" hidden></div>
-        </div>
-        <footer class="timeline">
-          <div class="tl-label">every time somebody has opened this</div>
-          <div class="tl-strip" data-role="strip"></div>
-        </footer>
-      </div>`;
-
-    this.sphere = this.root.querySelector('[data-role=sphere]');
-    this.collage = this.root.querySelector('[data-role=collage]');
-    this.strip = this.root.querySelector('[data-role=strip]');
-    this.sub = this.root.querySelector('[data-role=sub]');
-    this.revealEl = this.root.querySelector('[data-role=reveal]');
-
-    this.root.addEventListener('click', (e) => {
-      const act = e.target.closest('[data-act]')?.dataset.act;
-      if (act === 'back') location.hash = '#/';
-      if (act === 'again') this.again();
-      if (act === 'reveal') this.toggleReveal();
-      if (act === 'mute') {
-        const btn = e.target.closest('[data-act=mute]');
-        const next = !this.audio.muted;
-        this.audio.setMuted(next);
-        btn.textContent = next ? 'sound off' : 'sound on';
-      }
-    });
-
-    this.sphere.addEventListener('pointermove', (e) => {
-      const r = this.sphere.getBoundingClientRect();
-      this.sphere.style.setProperty('--mx', ((e.clientX - r.left) / r.width - 0.5).toFixed(3));
-      this.sphere.style.setProperty('--my', ((e.clientY - r.top) / r.height - 0.5).toFixed(3));
-    });
-    this.sphere.addEventListener('pointerleave', () => {
-      this.sphere.style.setProperty('--mx', 0);
-      this.sphere.style.setProperty('--my', 0);
-    });
-
-    this.drawTimeline();
-    this.pulse();
-  }
-
-  /** The sphere breathes with whatever is actually audible. */
-  pulse() {
-    cancelAnimationFrame(this.raf);
-    const tick = () => {
-      if (!this.sphere?.isConnected) return;
-      this.sphere.style.setProperty('--pulse', (0.8 + this.audio.level() * 0.9).toFixed(3));
-      this.raf = requestAnimationFrame(tick);
-    };
-    this.raf = requestAnimationFrame(tick);
-  }
-
-  async show(version, { replay = false } = {}) {
-    const token = ++this.token;
-    this.version = version;
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
     this.stopVideos();
     this.collage.innerHTML = '';
     this.sphere.style.setProperty('--decay', version.decay);
@@ -384,12 +254,7 @@ export class OrbView {
 
     const present = idsOf(version).size;
     const total = Object.keys(this.orb.components).length;
-<<<<<<< HEAD
     this.say(`${present} of ${total} fragments present · ${Math.round(version.decay * 100)}% faded${version.flash ? ' · <span class="flashword">a vivid flash</span>' : ''}`);
-=======
-    const label = replay ? `replaying opening ${version.n}` : `opening ${version.n}`;
-    this.sub.innerHTML = `${label} · ${present} of ${total} fragments present · ${Math.round(version.decay * 100)}% faded${version.flash ? ' · <span class="flashword">a vivid flash</span>' : ''}`;
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 
     const rect = this.sphere.getBoundingClientRect();
     const size = Math.min(rect.width, rect.height) || 720;
@@ -407,11 +272,7 @@ export class OrbView {
       if (plate.k !== 'image') continue;
       for (const layer of plate.layers) {
         try {
-<<<<<<< HEAD
           const canvas = await layerCanvas(this.orb, layer.c, 880, plate.sh);
-=======
-          const canvas = await layerCanvas(this.orb, layer.c);
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
           if (token !== this.token) return;
           const holder = this.collage.querySelector(`[data-layer="${cssEsc(layer.c)}"]`);
           if (holder) {
@@ -427,14 +288,8 @@ export class OrbView {
     }
 
     if (token !== this.token) return;
-<<<<<<< HEAD
     trimLayerCache();
     this.audio.play(this.orb, version, this.settings).catch(() => {});
-=======
-    this.audio.play(this.orb, version).catch(() => {});
-    this.drawTimeline();
-    if (!this.revealEl.hidden) this.drawReveal();
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
   }
 
   plateEl(plate, size, version) {
@@ -457,11 +312,7 @@ export class OrbView {
       const src = this.orb.sources[plate.src];
       const ratio = src.h && src.w ? src.h / src.w : 0.7;
       inner.style.paddingBottom = `${ratio * 100}%`;
-<<<<<<< HEAD
       inner.style.filter = cssFilter(plate.blur, plate.sat);
-=======
-      if (plate.blur) inner.style.filter = `blur(${plate.blur}px)`;
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
       for (const layer of plate.layers) {
         const holder = document.createElement('div');
         holder.className = 'layer';
@@ -483,20 +334,15 @@ export class OrbView {
       const ratio = src.h && src.w ? src.h / src.w : 0.56;
       inner.style.paddingBottom = `${ratio * 100}%`;
       inner.style.mixBlendMode = plate.b;
-<<<<<<< HEAD
       inner.style.filter = cssFilter(plate.blur, plate.sat);
       // The window is the plate's, not the component's: the portion cut at
       // upload is only the anchor the settings slid around.
       const win = plate.win || { start: comp.start, end: comp.end };
-=======
-      if (plate.blur) inner.style.filter = `blur(${plate.blur}px)`;
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
       const video = document.createElement('video');
       video.muted = true;             // the picture is silent; its sound is a strand
       video.playsInline = true;
       video.preload = 'auto';
       video.src = src.url;
-<<<<<<< HEAD
       video.playbackRate = plate.rate || 1;
       const loop = () => {
         if (video.currentTime >= win.end || video.currentTime < win.start - 0.4) {
@@ -505,39 +351,20 @@ export class OrbView {
       };
       video.addEventListener('loadedmetadata', () => {
         video.currentTime = win.start;
-=======
-      const loop = () => {
-        if (video.currentTime >= comp.end || video.currentTime < comp.start - 0.4) {
-          video.currentTime = comp.start;
-        }
-      };
-      video.addEventListener('loadedmetadata', () => {
-        video.currentTime = comp.start;
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
         video.play().catch(() => {});
       });
       video.addEventListener('timeupdate', loop);
       if (version.flashed?.includes(plate.c)) inner.classList.add('flashed');
       inner.appendChild(video);
-<<<<<<< HEAD
       if (plate.fl) this.flicker(inner, video, plate, win);
-=======
-      const tag = document.createElement('span');
-      tag.className = 'stamp';
-      tag.textContent = comp.name;
-      el.appendChild(tag);
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
       this.videos.push(video);
       return el;
     }
 
     if (plate.k === 'text') {
       el.style.width = `${plate.w * size}px`;
-<<<<<<< HEAD
       if (plate.tr != null) inner.style.letterSpacing = `${plate.tr}em`;
       if (plate.lh != null) inner.style.lineHeight = plate.lh;
-=======
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
       for (const f of plate.frags) {
         const comp = this.orb.components[f.c];
         if (!comp) continue;
@@ -546,10 +373,7 @@ export class OrbView {
         line.textContent = comp.text;
         line.style.opacity = f.o;
         line.style.fontSize = `${f.sc}em`;
-<<<<<<< HEAD
         if (plate.gl) line.style.textShadow = `0 0 ${(plate.gl * 18).toFixed(1)}px currentColor`;
-=======
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
         if (f.blur) line.style.filter = `blur(${f.blur}px)`;
         if (version.flashed?.includes(f.c)) line.classList.add('flashed');
         inner.appendChild(line);
@@ -559,7 +383,6 @@ export class OrbView {
     return null;
   }
 
-<<<<<<< HEAD
   /**
    * A bad tape: the picture dips, occasionally drops out entirely, and now and
    * then jumps somewhere else inside its own window. Driven on a timer rather
@@ -598,67 +421,10 @@ export class OrbView {
     this.stopStream();
     this.stopVideos();
     document.removeEventListener('keydown', this.onKey);
-=======
-  stopVideos() {
-    for (const v of this.videos) { try { v.pause(); v.removeAttribute('src'); v.load(); } catch {} }
-    this.videos = [];
-  }
-
-  drawTimeline() {
-    this.strip.innerHTML = this.orb.versions
-      .map((v) => {
-        const active = this.version && v.n === this.version.n;
-        return `<button class="chip${active ? ' active' : ''}${v.flash ? ' flash' : ''}" data-v="${v.n}" title="${new Date(v.at).toLocaleString()}">
-          <span class="chip-n">${v.n}</span>
-          <span class="chip-bar"><i style="width:${Math.round(v.decay * 100)}%"></i></span>
-        </button>`;
-      })
-      .join('');
-    this.strip.onclick = (e) => {
-      const n = e.target.closest('[data-v]')?.dataset.v;
-      if (!n) return;
-      const v = this.orb.versions.find((x) => x.n === Number(n));
-      if (v) this.show(v, { replay: true });
-    };
-    this.strip.scrollLeft = this.strip.scrollWidth;
-  }
-
-  toggleReveal() {
-    this.revealEl.hidden = !this.revealEl.hidden;
-    if (!this.revealEl.hidden) this.drawReveal();
-  }
-
-  drawReveal() {
-    const here = idsOf(this.version);
-    const groups = new Map();
-    for (const [id, c] of Object.entries(this.orb.components)) {
-      const key = KIND_LABEL[c.kind] || c.kind;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push({ id, c, here: here.has(id) });
-    }
-    const note = this.orb.analysis
-      ? `<p class="note">in the garden this memory plays as ${esc(explain(this.orb.analysis))}.</p>`
-      : '';
-    this.revealEl.innerHTML = note + [...groups]
-      .map(([kind, items]) => {
-        const rows = items
-          .map((it) => `<li class="${it.here ? 'here' : 'gone'}">${esc(labelFor(it.c))}</li>`)
-          .join('');
-        const n = items.filter((i) => i.here).length;
-        return `<section><h3>${kind}s <em>${n}/${items.length}</em></h3><ul>${rows}</ul></section>`;
-      })
-      .join('');
-  }
-
-  close() {
-    cancelAnimationFrame(this.raf);
-    this.stopVideos();
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
     this.token++;
   }
 }
 
-<<<<<<< HEAD
 /** Every component a single beat put in front of you. */
 export function beatIds(b) {
   const ids = [];
@@ -698,11 +464,6 @@ function cssFilter(blur, sat) {
   if (blur) parts.push(`blur(${blur}px)`);
   if (sat != null && Math.abs(sat - 1) > 0.01) parts.push(`saturate(${sat})`);
   return parts.join(' ');
-=======
-function labelFor(c) {
-  if (c.kind === 'textFragment') return `“${c.text.slice(0, 46)}${c.text.length > 46 ? '…' : ''}”`;
-  return c.name || c.kind;
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 }
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));

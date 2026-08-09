@@ -224,7 +224,6 @@ export async function probeAudio(file) {
   }
 }
 
-<<<<<<< HEAD
 /** Shredding limits. The lab can override these for new orbs. */
 export const TEXT_LIMITS = { maxWords: 7, maxChars: 45, minWords: 2 };
 
@@ -283,33 +282,6 @@ function mergeScraps(frags, maxWords, maxChars, minWords) {
     merged.push(frag);
   }
   return merged;
-=======
-/**
- * Phrase-level shredding: split at sentence ends first, then at internal
- * punctuation, then merge the scraps back up so nothing is a lone conjunction.
- * Target is 4-12 words -- long enough to still mean something on its own.
- */
-export function splitText(text) {
-  const clean = String(text || '').replace(/\s+/g, ' ').trim();
-  if (!clean) return [];
-  const out = [];
-  for (const sentence of clean.split(/(?<=[.!?…])\s+/)) {
-    const parts = sentence.split(/(?<=[,;:—–])\s+/).filter(Boolean);
-    let buf = '';
-    for (const p of parts) {
-      const words = (buf ? buf + ' ' + p : p).trim().split(' ').length;
-      if (buf && words > 12) { out.push(buf.trim()); buf = p; }
-      else buf = buf ? buf + ' ' + p : p;
-    }
-    if (buf.trim()) out.push(buf.trim());
-  }
-  const merged = [];
-  for (const frag of out) {
-    if (merged.length && frag.split(' ').length < 3) merged[merged.length - 1] += ' ' + frag;
-    else merged.push(frag);
-  }
-  return merged.map((f) => f.trim()).filter(Boolean);
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 }
 
 export { smoothstep };

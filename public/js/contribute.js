@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 // Adding to the wall. The whole thing is built around one constraint: a
 // stranger should be able to finish it in under a minute without being told
 // what to do. So there is one choice (how you want to leave it), one input, and
@@ -9,21 +8,11 @@
 // the page still visible behind it, and clicking outside is how you leave. That
 // is deliberate -- backing out of leaving a memory should cost exactly as
 // little as backing out of reading one, and nothing is created on the way out.
-=======
-// Adding to the wall. The whole screen is built around one constraint: a
-// stranger should be able to finish this in under a minute without being told
-// what to do. So there is one choice (how you want to leave it), one input, and
-// one button -- and the panel underneath shows, in plain words, exactly what
-// the site is about to do with what you gave it.
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 
 import { mulberry32, seed32 } from './rng.js';
 import { loadImageFile, analyzeImage, mediaMeta, probeAudio, splitText, hslToHex } from './analyze.js';
 import { imageComponents, videoComponents, audioComponents, textComponents } from './components.js';
-<<<<<<< HEAD
 import { defaults as defaultSettings } from './settings.js';
-=======
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 import { analyzeMemory, explain, EMOTION_HUE } from './emotion.js';
 
 const WAYS = [
@@ -34,18 +23,11 @@ const WAYS = [
 ];
 
 export class Contribute {
-<<<<<<< HEAD
   constructor(root, scape, session, { onLanded } = {}) {
     this.root = root;
     this.scape = scape;
     this.session = session;
     this.onLanded = onLanded;
-=======
-  constructor(root, scape, session) {
-    this.root = root;
-    this.scape = scape;
-    this.session = session;
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
     this.way = 'write';
     this.files = [];
     this.words = '';
@@ -55,7 +37,6 @@ export class Contribute {
   }
 
   open() {
-<<<<<<< HEAD
     this.root.innerHTML = `
       <div class="addmodal" data-role="modal">
         <div class="orbscrim" data-role="scrim"></div>
@@ -82,31 +63,6 @@ export class Contribute {
 
     this.modal = this.root.querySelector('[data-role=modal]');
     this.card = this.root.querySelector('[data-role=card]');
-=======
-    document.body.classList.remove('in-memory');
-    document.body.classList.add('adding');
-    this.root.innerHTML = `
-      <div class="add">
-        <div class="add-head">
-          <h2>leave one moment.</h2>
-          <p>it does not have to be a good one, or explained.</p>
-        </div>
-        <div class="ways" role="tablist">
-          ${WAYS.map((w) => `
-            <button class="way${w.id === this.way ? ' on' : ''}" role="tab" data-way="${w.id}" aria-selected="${w.id === this.way}">
-              ${w.icon}<b>${w.label}</b><span>${w.hint}</span>
-            </button>`).join('')}
-        </div>
-        <div data-role="stage"></div>
-        <div class="reading" data-role="reading"></div>
-        <div class="add-actions">
-          <button class="btn btn-solid" data-role="commit">put it on the wall</button>
-          <a class="btn" href="#/">not now</a>
-          <span class="status" data-role="status"></span>
-        </div>
-      </div>`;
-
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
     this.stage = this.root.querySelector('[data-role=stage]');
     this.readingEl = this.root.querySelector('[data-role=reading]');
     this.statusEl = this.root.querySelector('[data-role=status]');
@@ -115,7 +71,6 @@ export class Contribute {
       b.addEventListener('click', () => this.setWay(b.dataset.way));
     });
     this.root.querySelector('[data-role=commit]').addEventListener('click', () => this.commit());
-<<<<<<< HEAD
     this.root.querySelector('[data-role=cancel]').addEventListener('click', () => this.dismiss());
 
     // Anywhere outside the card is the way back, and it takes nothing with it.
@@ -123,14 +78,11 @@ export class Contribute {
     this.modal.addEventListener('click', (e) => { if (e.target === this.modal) this.dismiss(); });
     this.onKey = (e) => { if (e.key === 'Escape' && !this.sealing) this.dismiss(); };
     document.addEventListener('keydown', this.onKey);
-=======
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 
     this.drawStage();
     this.reading();
   }
 
-<<<<<<< HEAD
   dismiss() {
     // Halfway through sealing there is already an upload in flight; letting a
     // stray click cancel it would leave a half-written memory on the wall.
@@ -139,8 +91,6 @@ export class Contribute {
     location.hash = '#/';
   }
 
-=======
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
   setWay(way) {
     if (this.way === way) return;
     this.stopRecording();
@@ -350,11 +300,7 @@ export class Contribute {
       <br><br>
       <span class="lede">what it will sound like</span>
       ${text ? `<b>${esc(explain(a))}</b>. that is keyword matching against five word lists, not a model — you can read the lists in the source.`
-<<<<<<< HEAD
              : 'write a line and this will tell you which instruments it joins the collection on.'}`;
-=======
-             : 'write a line and this will tell you which instruments it joins the garden on.'}`;
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
   }
 
   status(s) { this.statusEl.textContent = s; }
@@ -377,30 +323,21 @@ export class Contribute {
     if (!words && !this.files.length) return this.status('give it something first — even one word.');
 
     btn.disabled = true;
-<<<<<<< HEAD
     this.sealing = true;
     const rng = mulberry32(seed32());
     const settings = defaultSettings();
-=======
-    const rng = mulberry32(seed32());
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
     const sources = {};
     const components = {};
     const files = [];
     const glows = [];
     const skipped = [];
 
-<<<<<<< HEAD
     // Shredding is the one setting that has to bite here rather than at replay:
     // components are cut exactly once, and this is that once.
     const limits = { maxWords: settings.text.maxWords, maxChars: settings.text.maxChars };
 
     if (words) {
       const frags = splitText(words, limits);
-=======
-    if (words) {
-      const frags = splitText(words);
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
       if (frags.length) {
         sources.txt1 = { kind: 'text', text: words, label: 'what was written' };
         Object.assign(components, textComponents('txt1', frags));
@@ -468,10 +405,7 @@ export class Contribute {
 
     if (!Object.keys(components).length) {
       btn.disabled = false;
-<<<<<<< HEAD
       this.sealing = false;
-=======
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
       return this.status(skipped.length
         ? `nothing in ${skipped.join(', ')} could be split. try another file.`
         : 'nothing there could be split. add a word or a file.');
@@ -484,11 +418,7 @@ export class Contribute {
     this.status(`sealing ${Object.keys(components).length} fragments…`);
     const body = new FormData();
     body.append('manifest', JSON.stringify({
-<<<<<<< HEAD
       title, glow, sources, components, settings,
-=======
-      title, glow, sources, components,
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
       emotion: analysis.emotion,
       analysis: { emotion: analysis.emotion, tempo: analysis.tempo, mood: analysis.mood, instruments: analysis.instruments, chords: analysis.chords, reverb: analysis.reverb, matched: analysis.matched },
     }));
@@ -497,24 +427,16 @@ export class Contribute {
     const res = await fetch('/api/orbs', { method: 'POST', body });
     if (!res.ok) {
       btn.disabled = false;
-<<<<<<< HEAD
       this.sealing = false;
       return this.status('the wall would not take it. try again in a second.');
     }
     const { id } = await res.json().catch(() => ({}));
 
     // The contribution joins the audioscape on the way back to the collection, so
-=======
-      return this.status('the wall would not take it. try again in a second.');
-    }
-
-    // The contribution joins the audioscape on the way back to the garden, so
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
     // you hear your own memory arrive in the room the moment you see it land.
     this.session.queue(analysis, title);
     this.files = [];
     this.words = '';
-<<<<<<< HEAD
 
     // The card gets out of the way, then the frost lifts, and only then does
     // the marble fly in -- so it is watched all the way into its slot on a page
@@ -525,10 +447,6 @@ export class Contribute {
     this.sealing = false;
     location.hash = '#/';
     if (id) this.onLanded?.(id);
-=======
-    window.__toast?.('it is on the wall. listen for it.');
-    location.hash = '#/';
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
   }
 
   async prepare(item, kind) {
@@ -543,11 +461,7 @@ export class Contribute {
 
   close() {
     this.stopRecording();
-<<<<<<< HEAD
     document.removeEventListener('keydown', this.onKey);
-=======
-    document.body.classList.remove('adding');
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
   }
 }
 

@@ -1,16 +1,8 @@
-<<<<<<< HEAD
 # mariinsky — a memory collective
 
 A shared wall of memories. Leave one moment; it becomes a marble among a page of
 junk. Every time somebody opens it, it gives itself back one piece at a time
 from a different handful of its own fragments, and a little more of it is gone.
-=======
-# mariisnky — i-spy memory garden
-
-A shared wall of memories. Leave one moment; it becomes a marble. Every time
-somebody opens it, it comes back from a different handful of its own fragments,
-and a little more of it is gone.
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 
 ```bash
 npm install
@@ -24,7 +16,6 @@ No build step. Node 18+, Express, and vanilla ES modules.
 
 ## The two worlds
 
-<<<<<<< HEAD
 **The collection** is a page out of an i-spy book, inside a printed blue border:
 paper white, flat, no drop shadows, nothing labelled, and nothing overlapping
 anything else. Mariinsky lies in the middle with the title printed across her
@@ -54,15 +45,6 @@ contribution is accepted the card gets out of the way and the new marble is
 flown from the middle of the screen into its slot, so you see *where it went* —
 on a page this full, a marble that simply appeared would be indistinguishable
 from one that had always been there.
-=======
-**The garden** is a page out of an i-spy book: paper white, marbles strewn
-across it, nothing labelled. Sweeping the cursor over a marble plays that
-memory's own recorded sound. It is public, flat, and a lot at once.
-
-**Inside a memory** is the opposite: one dark sphere, one thing at a time, and
-it is falling apart. Going from one to the other should feel like putting your
-eye to a hole in the page.
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 
 ---
 
@@ -74,7 +56,6 @@ eye to a hole in the page.
    upload. Nothing is ever re-cut.
 2. It is **read for emotion** by keyword-matching against five word lists. There
    is no model in this path, which is exactly why the interface can explain it
-<<<<<<< HEAD
    in one sentence — and does, before you contribute.
 3. It is **given a marble colour** drawn from the marbles already on the wall.
 4. It is **given a recipe** (`settings`) that says how it replays. Every memory
@@ -110,15 +91,6 @@ because closing the tab is the common way to go and `fetch` does not survive it.
 Roughly one moment in six, something long-absent returns at full clarity while
 everything around it stays faded. A vivid flash suspends the lot: no strobing,
 no blur, full colour, full volume, however far gone the rest of it is.
-=======
-   in one sentence — and does, both before you contribute and in the "what is
-   left" panel afterwards.
-3. It is **given a marble colour** drawn from the marbles already on the wall.
-4. Every **opening composes a new version** from a different subset of the
-   components, with decay climbing ~4–8% each time. Roughly one opening in six,
-   something long-absent returns at full clarity while everything around it
-   stays faded.
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 
 ---
 
@@ -135,22 +107,12 @@ Here a memory's contribution is a **swell**: it fades in over ~2.4s, plays its
 progression twice, fades out over ~4s, and disposes itself. Every contribution
 is heard, contributions stack while they overlap, and nothing repeats after it
 has gone. A memory contributes when it is **viewed or created** — the swell is
-<<<<<<< HEAD
 deferred until there is a collection to hear it in, so opening a memory and
 walking back out means you hear it arrive in the room behind you.
 
 Underneath sits **the bed**: a slow sustained pad built from the dominant
 emotion of the whole wall. It is the only looping part, and it is the only part
 that is genuinely collective.
-=======
-deferred until there is a garden to hear it in, so opening a memory and walking
-back out means you hear it arrive in the room behind you.
-
-Underneath sits **the bed**: a slow sustained pad built from the dominant
-emotion of the whole wall. It is the only looping part, and it is the only part
-that is genuinely collective. Without it the landing page would be silent
-whenever nobody was touching anything.
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 
 Hovering a marble is a **preview**, not a contribution: a real two-second window
 of that memory's recorded audio if it has any, otherwise the chord its words
@@ -185,7 +147,6 @@ jar just stays mixed. See the comment in `public/js/marble.js`.
 ```
 server.js                express: orb store, marble assignment, wall + stats
 scripts/seed.js          puts a few memories on the wall; safe to re-run
-<<<<<<< HEAD
 data/orbs/<id>.json      one memory: sources, components, recipe, every version
 uploads/<id>/            the original files
 public/js/
@@ -206,45 +167,20 @@ public/js/
   shaders.js             GLSL passes for image layers (off by default)
   components.js          analysis -> the fixed component pool (runs once)
   analyze.js             canvas analysis, text shredding, media probing
-=======
-data/orbs/<id>.json      one memory: sources, components, every version
-uploads/<id>/            the original files
-public/js/
-  app.js                 router, masthead, the deferred-contribution queue
-  garden.js              the scatter, hover previews, the live readout
-  contribute.js          write / say / draw / show — the under-a-minute flow
-  orbview.js             the sphere, the collage, the history timeline
-  marble.js              colour inheritance and physical traits  (also imported by the server)
-  emotion.js             memory text -> musical parameters, with explanations
-  audioscape.js          the garden's Web Audio: the bed and the swells
-  orbaudio.js            one memory's own decayed sound
-  compose.js             the next version: decay, flashes, layout, audio recipe
-  components.js          analysis -> the fixed component pool (runs once)
-  analyze.js             canvas analysis, text splitting, media probing
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
   imagelayers.js         renders one image layer into a cached canvas
   rng.js                 seeded RNG so any stored version replays exactly
 ```
 
-<<<<<<< HEAD
 `settings.js`, `compose.js`, `sequence.js`, `stream.js`, `shaders.js`,
 `components.js`, `analyze.js`, `imagelayers.js`, `rng.js` and `orbaudio.js` come
 from the orb prototype essentially unchanged. `orbview.js` is the prototype's
 renderer inside this app's modal shell.
-=======
-`compose.js`, `components.js`, `analyze.js`, `imagelayers.js`, `rng.js` and
-`orbaudio.js` are the orb prototype's, essentially unchanged.
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 
 ---
 
 ## Deploying
 
-<<<<<<< HEAD
 The collection is a shared wall, so it needs a **persistent filesystem** for
-=======
-The garden is a shared wall, so it needs a **persistent filesystem** for
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 `data/orbs` and `uploads`. Vercel and other ephemeral-filesystem hosts will lose
 every contribution on redeploy — use Render, Railway, or Fly with a volume
 mounted at the project root.
@@ -256,14 +192,11 @@ mounted at the project root.
 - `ffmpeg` is optional, and used only when the browser cannot decode an upload
   at all. Without it, undecodable files are skipped with a notice.
 
-<<<<<<< HEAD
 Orb writes are read-modify-write and a shared wall gets concurrent openings, so
 they are serialised per id and land via a temp file and a rename. Two openings
 arriving together used to interleave and leave a file that no longer parsed — a
 memory that reported itself gone.
 
-=======
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 ---
 
 ## Endpoints
@@ -274,18 +207,13 @@ memory that reported itself gone.
 | `GET /api/stats` | live counts: memories, openings, fragments, mean decay, emotion split, contributions per day |
 | `POST /api/orbs` | a contribution (multipart: `manifest` + `files`) |
 | `GET /api/orbs/:id` | one memory in full, including every past version |
-<<<<<<< HEAD
 | `POST /api/orbs/:id/versions` | begin a version — a collage arrangement, or a sequence seed |
 | `PATCH`/`POST /api/orbs/:id/versions/:n` | the write-back: beats watched, what was seen, strain left behind. POST as well as PATCH because `sendBeacon` is always a POST |
-=======
-| `POST /api/orbs/:id/versions` | append a composed version and advance the decay |
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 
 ---
 
 ## Known gaps
 
-<<<<<<< HEAD
 - The mascot is inline SVG, hand-traced from the reference illustration. It is
   the first thing to replace with the real artwork.
 - Trinkets are hand-drawn vectors, not photographic cut-outs like a real i-spy
@@ -295,11 +223,5 @@ memory that reported itself gone.
 - The laboratory (the prototype's per-memory tuning bench) was not brought
   across. Every memory runs the schema defaults, and the plumbing for per-memory
   recipes is already in place — `settings` on the record, `PUT` route absent.
-=======
-- The mascot is inline SVG. It is placeholder-grade and is the first thing to
-  replace with a real illustration.
-- Contributions are not rate-limited or moderated. A public wall on the open
-  internet will need both.
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 - `uploads/` ships with one small sample memory. The two video-heavy samples
   from the orb prototype were left out — they were 119 MB.

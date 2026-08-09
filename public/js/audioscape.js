@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 // The collection's collaborative audioscape.
-=======
-// The garden's collaborative audioscape.
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 //
 // Ported from memory-symphony's AudioEngine.ts (Tone.js) to plain Web Audio,
 // with one deliberate change to how memories join the sound. In the original,
@@ -11,11 +7,7 @@
 // nothing ever left. Here a memory's contribution is a *swell*: it fades in,
 // plays its progression a few times, fades out, and disposes itself. Every
 // contribution is heard, contributions stack while they overlap, and the sound
-<<<<<<< HEAD
 // of the collection is whatever is being visited right now.
-=======
-// of the garden is whatever is being visited right now.
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
 //
 // Underneath the swells sits the bed: a slow sustained pad built from the
 // dominant emotion of the whole wall. That is the part that is genuinely
@@ -130,11 +122,7 @@ export class Audioscape {
 
   get running() { return this.ctx?.state === 'running'; }
 
-<<<<<<< HEAD
   /** 0..1 loudness, for making the collection breathe. */
-=======
-  /** 0..1 loudness, for making the garden breathe. */
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
   level() {
     if (!this.analyser) return 0;
     const data = new Uint8Array(this.analyser.frequencyBinCount);
@@ -246,11 +234,7 @@ export class Audioscape {
   // ----------------------------------------------------- the collective bed --
 
   /**
-<<<<<<< HEAD
    * The only looping part of the collection: a slow pad on the chords of whichever
-=======
-   * The only looping part of the garden: a slow pad on the chords of whichever
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
    * emotion the wall holds most of. Rebuilt whenever the wall changes.
    */
   async setBed(emotions) {
@@ -349,11 +333,7 @@ export class Audioscape {
     return span;
   }
 
-<<<<<<< HEAD
   /** What is audible right now, for the collection's readout. */
-=======
-  /** What is audible right now, for the garden's readout. */
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
   get voices() {
     return [...this.live].map((v) => ({ label: v.label, emotion: v.emotion }));
   }
@@ -375,7 +355,6 @@ export class Audioscape {
     if (!this.muted) this.fadeMaster(1, 0.4);
   }
 
-<<<<<<< HEAD
   // -------------------------------------------- held while you are hovering --
 
   /**
@@ -472,8 +451,6 @@ export class Audioscape {
     return { release };
   }
 
-=======
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
   // --------------------------------------------------- previewing the input --
 
   async decode(url) {
@@ -490,11 +467,7 @@ export class Audioscape {
   /**
    * Hovering a marble plays the memory's *actual* recorded sound -- a couple of
    * seconds from one of its audio windows, faded at both ends, with the rest of
-<<<<<<< HEAD
    * the collection pulled down underneath it.
-=======
-   * the garden pulled down underneath it.
->>>>>>> f8ef35f94a047518ee9cf60e2a6ddc84c8087aa8
    */
   async previewClip(url, start = 0, end = 3) {
     await this.ensure();
