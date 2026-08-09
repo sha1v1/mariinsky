@@ -6,11 +6,17 @@ from a different handful of its own fragments, and a little more of it is gone.
 
 ```bash
 npm install
+npm run items    # cuts the page's objects out of the asset library (see below)
 npm run seed     # optional: puts a few memories on the wall so it is not empty
 npm start        # http://localhost:5173
 ```
 
 No build step. Node 18+, Express, and vanilla ES modules.
+
+`npm run items` is the one thing that has to happen before the first run. It
+looks for the asset library at `../assets` (override with `ITEM_SRC`) and writes
+trimmed, white-keyed cut-outs into `public/images/items/`, which is generated
+and not checked in. Without it the page has nothing to lay out but marbles.
 
 ---
 
@@ -19,17 +25,33 @@ No build step. Node 18+, Express, and vanilla ES modules.
 **The collection** is a page out of an i-spy book, inside a printed blue border:
 paper white, flat, no drop shadows, nothing labelled, and nothing overlapping
 anything else. Mariinsky lies in the middle with the title printed across her
-side. Sweeping the cursor over a marble plays that memory's own sound for
-exactly as long as you stay on it, and its title wraps itself around the glass.
-When there are more memories than fit on a screen the page grows and you drag it
-around.
+side, and the grid is cut around her so nothing is ever laid across the dog.
+Sweeping the cursor over a memory plays its own sound for exactly as long as you
+stay on it, and its title wraps itself around it.
 
-Most of what is on the page is **not** a memory. Every cell a marble did not
-take gets a trinket — a button, a die, a pencil, a shell — so the page is full
-at any wall size. That is not decoration for its own sake: a hunt needs
-something to hunt through, and eleven marbles alone on white paper is a
-dashboard, not a spread. Trinkets are inert: no pointer, no focus, no hover, and
-they are never round, so nothing is ever mistaken for a memory.
+A memory **is an object**, chosen by what it says: "the smell of bakery bread"
+is a pretzel, "my sister's birthday" is a slice of cake. When nothing in the
+library is close it stays a marble — which is not a failure state, it is what a
+memory looks like before it has told you enough to be a picture of anything.
+Matching is a keyword table in `items.js`, not a model: it runs on the wall
+payload with no network call, it is inspectable, and a wrong match is a wrong
+picture rather than a wrong memory.
+
+Most of what is on the page is **not** a memory. Every cell a memory did not
+take gets a trinket out of the same library, so the page is full at any wall
+size. That is not decoration for its own sake: a hunt needs something to hunt
+through, and eleven objects alone on white paper is a dashboard, not a spread.
+Trinkets are inert — no pointer, no focus, no hover, not in the tab order — and
+that, rather than what they are pictures of, is what tells them apart. A memory
+answers when you touch it. Making the junk look different from the memories
+would not be a hunt, it would be a spot-the-odd-one-out.
+
+The page is sized to the **window** first: rows and columns are chosen so a wall
+that fits lands inside one screen exactly, margins included, and nothing is
+cropped by the printed border. Only when there are more memories than the screen
+has cells does the page grow past the window and become something you drag.
+Panning is what you do when there is too much to fit, not the resting state of a
+page with eleven things on it.
 
 **Inside a memory** is the opposite: the page frosts over and one sphere rises
 out of the marble you clicked, lit by a gradient built from its own photographs
@@ -129,8 +151,9 @@ were mapped to.
 > the orbs are colored marbles; deterministic random color pick from what's
 > already on the wall
 
-Seeded by the memory's own id, so a marble looks identical on every load and to
-every visitor — you can tell someone "mine is the green one near the top" and be
+This is the colour of a memory that stayed a marble — the ones the object
+library had nothing close for. Seeded by the memory's own id, so a marble looks
+identical on every load and to every visitor — you can tell someone "mine is the green one near the top" and be
 believed. The parent is picked from the colours already present, then nudged in
 hue, saturation and lightness so a new marble reads as a *relative* of something
 in the jar rather than a duplicate. The colour is computed at contribution time
@@ -151,11 +174,13 @@ jar just stays mixed. See the comment in `public/js/marble.js`.
 ```
 server.js                express: orb store, marble assignment, wall + stats
 scripts/seed.js          puts a few memories on the wall; safe to re-run
+scripts/items.mjs        asset library -> trimmed, keyed cut-outs (npm run items)
 data/orbs/<id>.json      one memory: sources, components, recipe, every version
 uploads/<id>/            the original files
 public/js/
   app.js                 router, the two overlays, the deferred-contribution queue
   garden.js              the scatter, hover previews, the landing animation
+  items.js               memory text -> which object it is; the filler pool; fitting
   trinkets.js            the rest of the i-spy page
   mascot.js              Mariinsky, and the four clocks she moves on
   contribute.js          write / say / draw / show — the under-a-minute flow
@@ -218,10 +243,11 @@ memory that reported itself gone.
 
 ## Known gaps
 
-- The mascot is inline SVG, hand-traced from the reference illustration. It is
-  the first thing to replace with the real artwork.
-- Trinkets are hand-drawn vectors, not photographic cut-outs like a real i-spy
-  page. They read as a jumble at page scale but not at close range.
+- The object-matching table in `items.js` is hand-written, so a memory only
+  becomes a picture if its words happen to land on a tag. On the seed wall five
+  of eleven match; the rest stay marbles. Widening it is a matter of typing, not
+  of design, but the honest ceiling is that a library of 44 objects cannot cover
+  what people actually leave here.
 - Contributions are not rate-limited or moderated. A public wall on the open
   internet will need both.
 - The laboratory (the prototype's per-memory tuning bench) was not brought

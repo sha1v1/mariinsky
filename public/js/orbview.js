@@ -15,7 +15,7 @@
 // replayed by handing that seed back to the same generator.
 
 import { layerCanvas, trimLayerCache } from './imagelayers.js';
-import { composeVersion, idsOf, settingsOf } from './compose.js';
+import { composeVersion, settingsOf } from './compose.js';
 import { makeStream, decayAt, retainedStrain } from './sequence.js';
 import { StreamPlayer } from './stream.js';
 import { get } from './settings.js';
@@ -78,7 +78,6 @@ export class OrbView {
           </div>
           <div class="orb-caption">
             <h2 class="orb-title">${esc(o.title)}</h2>
-            <p class="orb-sub" data-role="sub"></p>
           </div>
         </div>
       </div>`;
@@ -87,7 +86,6 @@ export class OrbView {
     this.stage = this.root.querySelector('[data-role=stage]');
     this.sphere = this.root.querySelector('[data-role=sphere]');
     this.collage = this.root.querySelector('[data-role=collage]');
-    this.sub = this.root.querySelector('[data-role=sub]');
 
     // There is no back button: anywhere outside the orb closes it.
     this.root.querySelector('[data-role=scrim]').addEventListener('click', () => this.dismiss());
@@ -147,11 +145,6 @@ export class OrbView {
     this.raf = requestAnimationFrame(tick);
   }
 
-  /** The one line under the glass. It is the only readout left in here. */
-  say(html) {
-    if (this.sub) this.sub.innerHTML = html;
-  }
-
   // ------------------------------------------------------------- sequence ---
 
   /**
@@ -194,8 +187,6 @@ export class OrbView {
       this.sphere?.classList.add('flashing');
       setTimeout(() => this.sphere?.classList.remove('flashing'), 2600 / this.player.speed);
     }
-    const total = Object.keys(this.orb.components).length;
-    this.say(`${this.seen.size} of ${total} fragments seen · ${Math.round(b.decay * 100)}% faded${b.flash ? ' · <span class="flashword">a vivid flash</span>' : ''}`);
   }
 
   /**
@@ -251,10 +242,6 @@ export class OrbView {
     this.sphere.style.setProperty('--decay', version.decay);
     this.sphere.classList.toggle('flashing', !!version.flash);
     if (version.flash) setTimeout(() => this.sphere?.classList.remove('flashing'), 2600);
-
-    const present = idsOf(version).size;
-    const total = Object.keys(this.orb.components).length;
-    this.say(`${present} of ${total} fragments present · ${Math.round(version.decay * 100)}% faded${version.flash ? ' · <span class="flashword">a vivid flash</span>' : ''}`);
 
     const rect = this.sphere.getBoundingClientRect();
     const size = Math.min(rect.width, rect.height) || 720;

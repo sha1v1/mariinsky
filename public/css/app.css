@@ -214,19 +214,35 @@ body.overlay-on .masthead { opacity: 0; visibility: hidden; pointer-events: none
 
 /* Everything on the page that is not a memory. Inert in every sense: no
    pointer, no focus, no title, no hover. If it responded to anything it would
-   be a thing to check rather than a thing to look past. */
+   be a thing to check rather than a thing to look past.
+
+   The span is the square the object was given by the layout; the picture is
+   sized and turned inside it, small enough that the turn cannot push it out.
+   Rotation on the outer box instead would have swept a corner into the next
+   cell — an object spun 45deg is 1.41 times as wide as it looks. */
 .trinket {
   position: absolute;
   display: block;
   pointer-events: none;
-  transform: translate(-50%, -50%) rotate(var(--turn, 0deg)) scaleX(var(--flip, 1));
-  opacity: 0.94;
+  transform: translate(-50%, -50%);
   animation: fadein 0.9s ease both;
 }
-.trinket svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.trinket img {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(var(--turn, 0deg)) scaleX(var(--flip, 1));
+  /* photographs, so they are already lit; a hair off full opacity is what keeps
+     them behind the memories rather than level with them */
+  opacity: 0.93;
+}
 
 /* ------------------------------------------------------------- a marble --- */
 
+/* A memory is whichever object its own words matched, and a glass marble when
+   the library had nothing close. Both are the same square button with the same
+   behaviour: the pointer, the focus, the sound and the title that wraps around
+   it are what make either of them a memory rather than junk. */
 .marble {
   position: absolute;
   border-radius: 50%;
@@ -246,6 +262,21 @@ body.overlay-on .masthead { opacity: 0; visibility: hidden; pointer-events: none
 
 /* a memory arriving from the card it was just written in */
 .marble.landed { z-index: 30; }
+
+/* a memory that is a photograph of something. it wears its wear the way the
+   glass does — the colour goes first, then the thing itself starts to lift off
+   the paper — so a faded memory reads as faded whichever kind it is */
+.marble.is-object { border-radius: 6px; }
+.marble-object {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(var(--turn, 0deg));
+  filter: saturate(calc(1 - var(--decay) * 0.66)) contrast(calc(1 - var(--decay) * 0.12));
+  opacity: calc(1 - var(--decay) * 0.34);
+  transition: filter 0.5s, opacity 0.5s, transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: bob var(--bob-dur, 8s) var(--bob-delay, 0s) ease-in-out infinite;
+}
 
 .marble-body {
   position: absolute;
@@ -353,118 +384,56 @@ body.overlay-on .masthead { opacity: 0; visibility: hidden; pointer-events: none
 }
 .marble.sounding .marble-body { transform: rotate(var(--twist)) scale(1.14); }
 
+.marble:hover .marble-object,
+.marble:focus-visible .marble-object {
+  animation-play-state: paused;
+  filter: saturate(calc(1.04 - var(--decay) * 0.44)) brightness(1.03);
+  opacity: 1;
+  transform: translate(-50%, -50%) rotate(var(--turn, 0deg)) scale(1.12);
+}
+.marble.sounding .marble-object { transform: translate(-50%, -50%) rotate(var(--turn, 0deg)) scale(1.16); }
+
 /* ---------------------------------------------------------------- hero --- */
 
-/* Mariinsky lies in the middle of the page with the title printed across her
-   side. The marbles and trinkets are laid out around this box, never over it. */
+/* Mariinsky's portrait sits in the middle of the page. The marbles and
+   trinkets are laid out around this box, never over it.
+
+   Her width comes from `garden.js` as --hero-w rather than being chosen here,
+   because the layout has to cut a hole in the grid exactly her size and two
+   hand-kept copies of that number is how objects end up lying across her. The
+   fallback matches the one in garden.js and is only ever used if the page has
+   not been drawn yet. */
 .hero {
   position: absolute;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: min(820px, 96vw);
+  width: var(--hero-w, min(480px, 46vw));
   display: grid;
   place-items: center;
   pointer-events: none;
 }
-.hero-dog {
+.hero-image {
   width: 100%;
   height: auto;
   display: block;
   grid-area: 1 / 1;
-  overflow: visible;
-}
-
-/* the words sit on her body; her head is well to the left of them */
-.hero-words {
-  grid-area: 1 / 1;
-  justify-self: center;
-  transform: translate(7%, -3%);
-  text-align: center;
-  pointer-events: none;
-}
-.hero-words h1 {
-  font-family: var(--display);
-  font-weight: 400;
-  font-size: clamp(2.4rem, 6.4vw, 4.3rem);
-  letter-spacing: -0.015em;
-  line-height: 1;
-  color: var(--ink);
-}
-.hero-words .dot-a { color: var(--dot-a); }
-.hero-words .dot-b { color: var(--dot-b); }
-.hero-words p {
-  font-family: var(--hand);
-  font-size: clamp(0.95rem, 2vw, 1.32rem);
-  color: var(--scrawl);
-  margin-top: 0.55rem;
-  letter-spacing: 0.02em;
-}
-
-/* ------------------------------------------------------- she is alive --- */
-
-/* Four clocks, none of them a multiple of another, so the wag, the tongue, the
-   head and the eye never land together and she never reads as one looping gif.
-   Every one of them is still for most of its cycle. */
-
-.hero-tail {
-  transform-origin: 75% 69%;
-  animation: wag 11s ease-in-out infinite;
-}
-@keyframes wag {
-  0%, 58%, 100% { transform: rotate(0deg); }
-  62% { transform: rotate(-8deg); }
-  66% { transform: rotate(9deg); }
-  70% { transform: rotate(-7deg); }
-  74% { transform: rotate(8deg); }
-  78% { transform: rotate(-4deg); }
-  83% { transform: rotate(0deg); }
-}
-
-.hero-tongue {
-  transform-origin: 9% 43%;
-  animation: loll 9s ease-in-out infinite;
-}
-@keyframes loll {
-  0%, 70%, 100% { transform: rotate(0deg) translateY(0); }
-  75% { transform: rotate(7deg) translateY(3px); }
-  80% { transform: rotate(-5deg) translateY(1px); }
-  85% { transform: rotate(4deg) translateY(2px); }
-  91% { transform: rotate(0deg) translateY(0); }
-}
-
-/* she looks up at you, holds it, and goes back to lying there */
-.hero-head {
-  transform-origin: 22% 31%;
-  animation: lookup 17s cubic-bezier(0.4, 0, 0.3, 1) infinite;
-}
-@keyframes lookup {
-  0%, 44%, 100% { transform: rotate(0deg) translate(0, 0); }
-  49%, 62% { transform: rotate(-6deg) translate(0.4%, -1.2%); }
-  70% { transform: rotate(1.5deg) translate(0, 0); }
-}
-
-.hero-eye {
-  transform-origin: 20% 33%;
-  animation: blink 13s ease-in-out infinite;
-}
-@keyframes blink {
-  0%, 26%, 100% { transform: scaleY(1); }
-  28% { transform: scaleY(0.25); }
-  31% { transform: scaleY(1); }
-  33% { transform: scaleY(0.25); }
-  36% { transform: scaleY(1); }
 }
 
 /* --------------------------------------------------------- her thoughts --- */
 
 /* Three pips climb away from her head in a widening arc before the question
    itself arrives. No outline on any of them: an inked border made the bubble
-   read as a sticker pasted over the page rather than as something of hers. */
+   read as a sticker pasted over the page rather than as something of hers.
+
+   She lies facing left with her head at the very left edge of the portrait, so
+   her thoughts go out that way: the anchor is the left edge of the hero box,
+   level with her brow, and every child is placed by `right` so the arc reads
+   outward from her rather than back across her own face. */
 .thought {
   position: absolute;
-  left: 11%;
-  bottom: 76%;
+  right: 100%;
+  top: 24%;
   pointer-events: none;
 }
 /* white on white paper needs a shadow to have a shape at all, which is exactly
@@ -477,14 +446,14 @@ body.overlay-on .masthead { opacity: 0; visibility: hidden; pointer-events: none
   opacity: 0;
   transform: scale(0.4);
 }
-.thought-pip.one   { width: 8px;  height: 8px;  left: 0px;  bottom: -18px; }
-.thought-pip.two   { width: 13px; height: 13px; left: 30px; bottom: 10px; }
-.thought-pip.three { width: 20px; height: 20px; left: 72px; bottom: 46px; }
+.thought-pip.one   { width: 8px;  height: 8px;  right: -6px; top: 30px; }
+.thought-pip.two   { width: 13px; height: 13px; right: 16px; top: 6px; }
+.thought-pip.three { width: 20px; height: 20px; right: 44px; top: -24px; }
 
 .thought-bubble {
   position: absolute;
-  left: 132px;
-  bottom: 102px;
+  right: 76px;
+  top: -84px;
   width: max-content;
   padding: 0.72rem 1.1rem;
   border-radius: 999px;
@@ -496,7 +465,7 @@ body.overlay-on .masthead { opacity: 0; visibility: hidden; pointer-events: none
   white-space: nowrap;
   opacity: 0;
   transform: scale(0.85);
-  transform-origin: bottom left;
+  transform-origin: bottom right;
   pointer-events: none;
   transition: transform 0.18s, background 0.18s, color 0.18s;
 }
@@ -566,12 +535,9 @@ body.overlay-on .masthead { opacity: 0; visibility: hidden; pointer-events: none
   transition: box-shadow 0.5s;
 }
 
-/* Title and readout are stacked in flow inside one positioned box rather than
-   being two absolutes at fixed offsets. The offsets used to be 1rem and 2.6rem
-   from the foot of the sphere -- a 1.6rem gap holding a line box of about
-   1.75rem -- so any title long enough to wrap laid its second line straight
-   through the readout. Flow makes the gap a consequence of the title's real
-   height, at any length and any window size. */
+/* The title, and nothing else. There used to be a readout under it counting
+   fragments seen and percent faded, which told you in numbers the thing the
+   sphere is already telling you by coming apart in front of you. */
 .orb-caption {
   position: absolute;
   top: calc(100% + 1rem);
@@ -592,15 +558,6 @@ body.overlay-on .masthead { opacity: 0; visibility: hidden; pointer-events: none
   text-align: center;
   line-height: 1.3;
 }
-/* the only readout left in here: what is present, and how far gone it is */
-.orb-sub {
-  max-width: 90vw;
-  font-size: 0.76rem;
-  letter-spacing: 0.05em;
-  color: var(--faint);
-  text-align: center;
-}
-.flashword { color: color-mix(in srgb, var(--dot-b) 80%, var(--ink)); }
 
 /* -------------------------------------------------- the inside of an orb --- */
 
@@ -977,20 +934,28 @@ textarea::placeholder, input::placeholder { color: var(--faint); }
 /* ----------------------------------------------------------- responsive --- */
 
 @media (max-width: 720px) {
-  /* at 390px her head ran into the "m". the hero is allowed to overhang the
-     viewport so she keeps her proportions and her head stays clear of the
-     type, which still sits dead centre of the screen. */
-  /* on a narrow screen she fits rather than overhangs. an earlier version let
-     her run off both edges to keep her size up, and it cost her nose and her
-     tongue — a cropped face reads as a bug, not as a crop */
-  .hero { width: 98vw; }
-  .hero-words { transform: translate(11%, -2%); }
-  .hero-words h1 { font-size: 2.1rem; }
-  .hero-words p { font-size: 0.9rem; }
-  .thought { left: 13%; bottom: 78%; }
-  .thought-pip.two   { left: 22px; bottom: 8px; }
-  .thought-pip.three { left: 52px; bottom: 34px; }
-  .thought-bubble { font-size: 0.95rem; padding: 0.6rem 0.9rem; left: 84px; bottom: 66px; }
+  /* Her width still comes from garden.js — it takes a bigger share of a narrow
+     window so she does not shrink to a sticker.
+
+     The pips keep climbing away to the left, but on a phone there is not 200px
+     of paper out there to hold the question as well, so the bubble turns the
+     corner and sits above her instead of beside her. Leaving it where it is on
+     a wide screen would have run it off the left edge at every phone width. */
+  .thought { right: 92%; top: 6%; }
+  .thought-pip.one   { right: -8px; top: 22px; }
+  .thought-pip.two   { right: 12px; top: 2px; }
+  .thought-pip.three { right: 34px; top: -22px; }
+  .thought-bubble {
+    right: auto;
+    left: 12px;
+    top: -92px;
+    width: min(46vw, 190px);
+    white-space: normal;
+    text-align: left;
+    transform-origin: bottom left;
+    font-size: 0.95rem;
+    padding: 0.6rem 0.9rem;
+  }
   .marble-ring text { font-size: 8.4px; }
 
   .ways { grid-template-columns: repeat(2, 1fr); }
@@ -1008,8 +973,7 @@ textarea::placeholder, input::placeholder { color: var(--faint); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .marble-body, .plate-inner, .grain, .marble-ring,
-  .hero-tail, .hero-tongue, .hero-head, .hero-eye { animation: none !important; }
+  .marble-body, .marble-object, .plate-inner, .grain, .marble-ring { animation: none !important; }
   .plate, .marble, .trinket, .addcard { animation-duration: 0.01ms !important; }
   .thought-pip, .thought-bubble { animation-duration: 0.01ms !important; }
   .seq-beat, .seq-word, .seq-layer { transition-duration: 0.01ms !important; }

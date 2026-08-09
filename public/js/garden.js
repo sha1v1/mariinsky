@@ -11,8 +11,24 @@ import { marbleTraits, hashId } from './marble.js';
 import { swirlSvg } from './swirl.js';
 import { Mascot } from './mascot.js';
 import { trinketFor, trinketEl } from './trinkets.js';
+import { loadItems, matchItem, fitRotated, itemSrc } from './items.js';
 
 const HOVER_DWELL = 170;   // ms before a marble starts sounding
+
+// Mariinsky's portrait, at her natural proportions. The layout has to know how
+// tall she is to keep the page off her, and asking the DOM is circular -- the
+// image is laid out by the same pass that is trying to measure it -- so the one
+// number that cannot be derived is written down here and the stylesheet is told
+// her width rather than choosing it.
+const HERO_ASPECT = 1638 / 1126;
+const HERO_MAX = 480;      // px. she used to be 820 and swallowed the middle of the page
+const HERO_SHARE = 0.46;   // ...or this much of the window, whichever is less
+const HERO_SHARE_NARROW = 0.56;   // a phone has less paper to spare her
+const NARROW_PX = 720;     // must match the stylesheet's breakpoint: below it her
+                           // thoughts sit above her rather than beside her
+const HERO_PAD = 14;       // clear paper kept around her on every side
+
+const GAP = 6;             // px of guaranteed air between any two objects
 
 export class Garden {
   constructor(root, scape, session) {
@@ -43,6 +59,10 @@ export class Garden {
     this.wallEl = this.root.querySelector('[data-role=wall]');
     this.clutterEl = this.root.querySelector('[data-role=clutter]');
 
+    // The object library has to be in hand before the first draw: what a memory
+    // is a picture of decides how big its box is, and the boxes are the layout.
+    await loadItems();
+
     this.wall = await fetch('/api/wall').then((r) => r.json()).catch(() => []);
     this.draw();
     this.pollTimer = setInterval(() => this.refresh(), 15000);
@@ -65,19 +85,22 @@ export class Garden {
   // ------------------------------------------------------------ the spread --
 
   /**
-   * A fixed-size cell grid, one object per cell, jittered inside its cell by
-   * less than the slack around it -- which is what guarantees no two objects
-   * ever touch. Cells that fall under the title are struck out before anything
-   * is placed, so the words are never crowded and never covered.
+   * A cell grid, one object per cell, jittered inside its cell by less than the
+   * slack around it -- which is what guarantees no two objects ever touch. Cells
+   * that fall under Mariinsky are struck out before anything is placed, so she
+   * is never crowded and never covered.
    *
    * Every cell a memory did not take gets a trinket, so the page is full at any
    * wall size. That is not decoration for its own sake: a hunt needs something
    * to hunt through, and eleven marbles alone on white paper is not a page out
    * of an i-spy book, it is a dashboard.
    *
-   * The page grows downward to fit; it never shrinks the marbles to cram them
-   * in, because an i-spy page is a fixed scale you move around, not a diagram
-   * that reflows.
+   * The grid is sized to the *window* first: rows and columns are chosen so a
+   * wall that fits lands inside one screen exactly, margins included, and
+   * nothing is ever cropped by the printed border. Only when there are more
+   * memories than the screen has cells does the page grow past the window and
+   * become something you drag -- panning is what you do when there is too much
+   * to fit, not the resting state of a page with eleven things on it.
    */
   layout() {
     const n = this.wall.length;
@@ -85,29 +108,40 @@ export class Garden {
     const vh = this.stage.clientHeight || 800;
     const narrow = vw < 620;
 
-    const target = narrow ? 98 : 132;
-    const cols = Math.max(2, Math.round(vw / target));
-    const cell = vw / cols;
+    // Keep the grid inside the printed border. `.frame` is inset by
+    // clamp(10px, 1.6vmin, 22px) and is 3px thick, and its matte crops whatever
+    // is underneath, so anything laid out in that band is a half-object.
+    const inset = Math.max(10, Math.min(22, Math.min(vw, vh) * 0.016)) + 3;
+    const m = inset + 6;
+    const gw = Math.max(1, vw - m * 2);
+    const gh = Math.max(1, vh - m * 2);
 
-    // Mariinsky and the title, in page coordinates, kept clear of everything
-    // else. These track the `.hero` box in the stylesheet; if she is resized
-    // there, they have to move with her or objects land on her.
-    const heroW = narrow ? vw : Math.min(820, vw * 0.96);
-    const heroH = narrow ? vw * 0.78 : 320;
+    const target = narrow ? 88 : 116;
+    const cols = Math.max(2, Math.round(gw / target));
+    const cellW = gw / cols;
+    const fitRows = Math.max(1, Math.round(gh / cellW));
+    const cellH = gh / fitRows;
 
-    // Grow rows until enough cells survive the hero cut-out. Start from a full
-    // screen so the spread always reaches every edge.
-    let rows = Math.max(Math.ceil(vh / cell), 1);
+    // Mariinsky, in page coordinates. The stylesheet is handed this width so
+    // the two can never drift apart -- the old pair of hand-kept numbers said
+    // she was 320 tall while she was really rendering at 564, which is exactly
+    // how objects ended up lying across her.
+    const heroW = Math.min(HERO_MAX, vw * (vw <= NARROW_PX ? HERO_SHARE_NARROW : HERO_SHARE));
+    const heroH = heroW / HERO_ASPECT;
+    this.hero = { w: heroW, h: heroH };
+
+    // Grow rows only if the screenful cannot hold the memories.
+    let rows = fitRows;
     let cells = [];
-    for (let guard = 0; guard < 60; guard++) {
-      const H = rows * cell;
-      const hx0 = (vw - heroW) / 2, hx1 = hx0 + heroW;
-      const hy0 = (H - heroH) / 2, hy1 = hy0 + heroH;
+    for (let guard = 0; guard < 200; guard++) {
+      const H = m * 2 + rows * cellH;
+      const hx0 = (vw - heroW) / 2 - HERO_PAD, hx1 = hx0 + heroW + HERO_PAD * 2;
+      const hy0 = (H - heroH) / 2 - HERO_PAD, hy1 = hy0 + heroH + HERO_PAD * 2;
       cells = [];
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
-          const x0 = c * cell, y0 = r * cell;
-          const clash = x0 < hx1 && x0 + cell > hx0 && y0 < hy1 && y0 + cell > hy0;
+          const x0 = m + c * cellW, y0 = m + r * cellH;
+          const clash = x0 < hx1 && x0 + cellW > hx0 && y0 < hy1 && y0 + cellH > hy0;
           if (!clash) cells.push({ c, r });
         }
       }
@@ -124,41 +158,43 @@ export class Garden {
       .sort((a, b) => a.k - b.k)
       .map((x) => x.cellRef);
 
-    const fragMax = Math.max(...this.wall.map((m) => m.fragments || 1), 1);
+    // The largest square that can sit in a cell and still leave air around it.
+    const avail = Math.max(8, Math.min(cellW, cellH) - GAP);
+    const at = (spot, box, jx, jy) => ({
+      x: m + spot.c * cellW + cellW / 2 + (jx - 0.5) * 2 * Math.max(0, (cellW - box) / 2 - 1),
+      y: m + spot.r * cellH + cellH / 2 + (jy - 0.5) * 2 * Math.max(0, (cellH - box) / 2 - 1),
+    });
+
+    const fragMax = Math.max(...this.wall.map((mem) => mem.fragments || 1), 1);
     // Oldest first, so a new memory takes the next free cell rather than
     // shunting everybody else along.
     const ordered = this.wall.slice().sort((a, b) => a.createdAt - b.createdAt);
 
+    const used = new Set();
     const place = ordered.map((memory, i) => {
       const spot = cells[i % Math.max(1, cells.length)];
       const rng = mulberry32(hashId(memory.id) ^ 0x5f3a);
       const weight = Math.sqrt((memory.fragments || 1) / fragMax);
-      const size = cell * (0.40 + 0.22 * weight);
-      // slack is whatever the cell has left over once this marble is in it
-      const slack = Math.max(0, (cell - size) / 2 - 2);
-      return {
-        memory,
-        size,
-        x: spot.c * cell + cell / 2 + (rng() - 0.5) * 2 * slack,
-        y: spot.r * cell + cell / 2 + (rng() - 0.5) * 2 * slack,
-      };
+      const item = matchItem(memory, used);
+      if (item) used.add(item.id);
+      const box = avail * (0.50 + 0.26 * weight);
+      // A memory lies almost square to the page. The junk around it is thrown
+      // down at any angle, and that difference is doing quiet work: it is the
+      // first thing that makes one of these read as placed rather than spilt.
+      const turn = item ? (rng() - 0.5) * 26 : 0;
+      return { memory, item, turn, box, ...at(spot, box, rng(), rng()) };
     });
 
     // Whatever the memories left over. Same jitter rule, so a trinket is no
     // more able to touch its neighbour than a marble is.
     const clutter = cells.slice(n).map((spot) => {
       const t = trinketFor(spot.c, spot.r);
-      const size = cell * 0.52 * t.scale;
-      const slack = Math.max(0, (cell - size) / 2 - 2);
-      return {
-        t,
-        size,
-        x: spot.c * cell + cell / 2 + (t.jx - 0.5) * 2 * slack,
-        y: spot.r * cell + cell / 2 + (t.jy - 0.5) * 2 * slack,
-      };
-    });
+      if (!t) return null;
+      const box = avail * t.scale;
+      return { t, box, ...at(spot, box, t.jx, t.jy) };
+    }).filter(Boolean);
 
-    return { place, clutter, W: vw, H: rows * cell, heroH };
+    return { place, clutter, W: vw, H: m * 2 + rows * cellH };
   }
 
   draw() {
@@ -166,13 +202,14 @@ export class Garden {
     this.bounds = { w: W, h: H };
     this.page.style.width = `${W}px`;
     this.page.style.height = `${H}px`;
+    this.page.style.setProperty('--hero-w', `${this.hero.w}px`);
 
     const junk = document.createDocumentFragment();
-    clutter.forEach(({ t, size, x, y }) => junk.appendChild(trinketEl(t, size, x, y)));
+    clutter.forEach(({ t, box, x, y }) => junk.appendChild(trinketEl(t, box, x, y)));
     this.clutterEl.replaceChildren(junk);
 
     const frag = document.createDocumentFragment();
-    place.forEach(({ memory, size, x, y }, i) => frag.appendChild(this.marbleEl(memory, size, x, y, i)));
+    place.forEach((p, i) => frag.appendChild(this.marbleEl(p, i)));
     this.wallEl.replaceChildren(frag);
 
     // Open centred on the title, wherever it has ended up on the page. A pan
@@ -228,16 +265,26 @@ export class Garden {
     if (this.landing) setTimeout(() => this.refresh(), 500);
   }
 
-  marbleEl(memory, size, x, y, i) {
+  /**
+   * One memory on the page. It is whichever object its own words matched, and a
+   * marble when the library had nothing close -- which is not a failure state:
+   * the marble is what a memory looks like before it has told you enough to be
+   * a picture of anything.
+   *
+   * Either way the box is square and behaves identically. Everything that makes
+   * a memory a memory rather than junk -- the pointer, the focus ring, the
+   * sound, the title that wraps around it -- lives out here, on the button.
+   */
+  marbleEl({ memory, item, turn, box, x, y }, i) {
     const t = marbleTraits(memory.id);
     const el = document.createElement('button');
-    el.className = 'marble';
+    el.className = item ? 'marble is-object' : 'marble';
     el.dataset.id = memory.id;
     el.type = 'button';
     el.setAttribute('aria-label', `${memory.title} — open it`);
     el.style.cssText = `
       left:${x}px; top:${y}px;
-      width:${size}px; height:${size}px;
+      width:${box}px; height:${box}px;
       --marble:${memory.marble};
       --decay:${memory.decay};
       --twist:${t.twist}deg;
@@ -247,7 +294,7 @@ export class Garden {
       --bob-delay:${t.bobDelay}ms;
       --in-delay:${Math.min(800, i * 22)}ms;`;
 
-    // The title wraps itself around the glass instead of sitting in a card
+    // The title wraps itself around the object instead of sitting in a card
     // beside it — an i-spy page has no captions.
     const ring = `
       <svg class="marble-ring" viewBox="0 0 100 100" aria-hidden="true">
@@ -255,14 +302,20 @@ export class Garden {
         <text><textPath href="#r${memory.id}" startOffset="0%">${esc(memory.title).slice(0, 84)}</textPath></text>
       </svg>`;
 
-    el.innerHTML = `
-      <span class="marble-body">
-        ${swirlSvg(memory.id)}
-        <span class="marble-glass"></span>
-        <span class="marble-haze"></span>
-        <span class="marble-shine"></span>
-      </span>
-      ${ring}`;
+    const body = item
+      ? (() => {
+          const fit = fitRotated(item, box, turn);
+          return `<img class="marble-object" src="${itemSrc(item)}" alt="" draggable="false" decoding="async"
+                    style="width:${fit.w.toFixed(1)}px;height:${fit.h.toFixed(1)}px;--turn:${turn.toFixed(1)}deg">`;
+        })()
+      : `<span class="marble-body">
+           ${swirlSvg(memory.id)}
+           <span class="marble-glass"></span>
+           <span class="marble-haze"></span>
+           <span class="marble-shine"></span>
+         </span>`;
+
+    el.innerHTML = `${body}${ring}`;
 
     el.addEventListener('pointerenter', () => this.hover(memory, el));
     el.addEventListener('focus', () => this.hover(memory, el));
