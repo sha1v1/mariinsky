@@ -16,6 +16,22 @@ import type {
   EntityKind, AnchorType, StructureTemplateId, ImplementedStructureTemplateId, StructureAnchorDef,
 } from "./ontology.ts";
 
+export type AppearanceCondition = "new" | "worn" | "aged" | "faded" | "weathered" | "pristine";
+export type MaterialStyle = "matte" | "rough" | "glossy" | "soft" | "metallic" | "neutral";
+export type BehaviorAnimation = "still" | "gentle_sway" | "slow_breathing" | "bob" | "pulse" | "flicker" | "drift";
+
+/** High-level, semantic art direction. Numeric renderer values never come from the model. */
+export interface AppearanceSpec {
+  colorFamily?: string;
+  scale: Scale;
+  condition: AppearanceCondition;
+  materialStyle?: MaterialStyle;
+}
+
+export interface BehaviorSpec {
+  animation: BehaviorAnimation;
+}
+
 // Whether/how this entity needs a container to make physical sense (world
 // hierarchy §3). Required whenever entityKind is "supported_object";
 // present-but-trivial (canExistStandalone: true, no preferred anchors) for
@@ -49,6 +65,10 @@ export interface SymbolCandidateDraft {
   fallbackArchetype: FallbackArchetype;
   // Concrete evidence from the source memory (pipeline §11).
   groundingEvidence: string[];
+  // Open retrieval vocabulary. The model describes what to search for;
+  // application code chooses the actual local asset id.
+  assetSearchTerms: string[];
+  semanticTags: string[];
   // Self-estimated by the LLM at candidate-generation time (pipeline §18);
   // semanticFit, specificity, and novelty are instead computed
   // deterministically by lib/score.ts.
@@ -63,6 +83,8 @@ export interface SymbolCandidateDraft {
   primaryColor: string;
   secondaryColor?: string;
   uniqueDetail?: string;
+  appearance: AppearanceSpec;
+  behavior: BehaviorSpec;
   // World-hierarchy fields (architecture refactor) — closed EntityKind
   // classification plus the support requirements that drive
   // lib/placementPipeline.ts. Architectural fragments (window, door,
@@ -77,6 +99,7 @@ export interface SymbolCandidateDraft {
 export interface MemoryIR {
   summary: string;
   epitaph: string;
+  timeContext: "past" | "present" | "ongoing" | "future" | "timeless";
   literal_anchors: string[];
   themes: string[];
   emotion: {
@@ -96,6 +119,7 @@ export interface ScoredCandidate extends SymbolCandidateDraft {
   semanticFit: number;
   specificity: number;
   novelty: number;
+  groundingPenalty: number;
   finalScore: number;
 }
 
@@ -111,14 +135,39 @@ export interface VisualObjectSpec {
   uniqueDetail?: string;
   preferredPlacement: PlacementType;
   explanation: string[];
+  // The semantic appearance and chosen reusable 3D representation remain
+  // explicit even for legacy clients that only read visual_spec.
+  materialStyle?: MaterialStyle;
+  assetId?: string;
+  assetPath?: string;
+  finalScale?: number;
 }
 
-export type RenderStatus = "pending" | "generated" | "fallback" | "failed";
+export interface VisualRepresentation {
+  assetId: string;
+  assetPath: string;
+  retrievalTier: "exact" | "related" | "family" | "keepsake";
+  retrievalScore: number;
+  scale: number;
+  colorFamily?: string;
+  condition: AppearanceCondition;
+  materialStyle?: MaterialStyle;
+  animation: BehaviorAnimation;
+}
+
+export type RenderStatus = "local_3d" | "pending" | "generated" | "fallback" | "failed";
 
 export interface MemoryRow {
-  input_type: "text" | "photo" | "voice";
+  input_type: "text" | "photo" | "voice" | "video";
   raw_text: string | null;
   input_url: string | null;
+  media_metadata?: {
+    mimeType: string;
+    fileName: string;
+    size: number;
+    storagePath: string;
+    geminiFileName: string;
+  } | null;
   ir: MemoryIR;
   epitaph: string;
 
@@ -127,8 +176,11 @@ export interface MemoryRow {
   label: string;
   fallback_archetype: FallbackArchetype;
   grounding_evidence: string[];
+  asset_search_terms: string[];
+  semantic_tags: string[];
 
   visual_spec: VisualObjectSpec;
+  visual_representation: VisualRepresentation;
 
   generated_asset_url: string | null;
   render_status: RenderStatus;

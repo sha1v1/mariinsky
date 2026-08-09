@@ -34,7 +34,7 @@ import type {
   EntityKind,
   FallbackArchetype,
 } from "./ontology.ts";
-import type { MemoryIR, VisualObjectSpec } from "./types.ts";
+import type { AppearanceSpec, BehaviorSpec, MemoryIR, VisualObjectSpec } from "./types.ts";
 import { clamp01, hashString, mulberry32, pick } from "./util.ts";
 
 interface WinningIdentity {
@@ -47,6 +47,8 @@ interface WinningIdentity {
   secondaryColor?: string;
   uniqueDetail?: string;
   groundingEvidence: string[];
+  appearance?: AppearanceSpec;
+  behavior?: BehaviorSpec;
 }
 
 // --- material: seeded pick from a category-appropriate subset -------------
@@ -204,9 +206,9 @@ function buildExplanation(
 export function deriveVisualSpec(winner: WinningIdentity, ir: MemoryIR): VisualObjectSpec {
   const rand = mulberry32(hashString(`${winner.noun}|${winner.label}`));
 
-  const condition = deriveCondition(ir.emotion, ir.setting.indoors, rand);
-  const scale = deriveScale(ir.emotion, rand);
-  const animation = deriveAnimation(winner.category, winner.entityKind, winner.fallbackArchetype, ir.emotion, rand);
+  const condition = winner.appearance?.condition ?? deriveCondition(ir.emotion, ir.setting.indoors, rand);
+  const scale = winner.appearance?.scale ?? deriveScale(ir.emotion, rand);
+  const animation = winner.behavior?.animation ?? deriveAnimation(winner.category, winner.entityKind, winner.fallbackArchetype, ir.emotion, rand);
   const material = pick(MATERIALS_BY_CATEGORY[winner.category] ?? MATERIALS_BY_CATEGORY.object, rand);
   const preferredPlacement = keywordPlacement(ir) ?? PLACEMENT_BY_CATEGORY[winner.category] ?? "generic";
   const glow = clamp01(0.35 * ir.emotion.nostalgia + 0.25 * ir.emotion.valence + (rand() - 0.5) * 0.1);
@@ -216,11 +218,12 @@ export function deriveVisualSpec(winner: WinningIdentity, ir: MemoryIR): VisualO
     condition,
     scale,
     animation,
-    primaryColor: winner.primaryColor,
+    primaryColor: winner.appearance?.colorFamily ?? winner.primaryColor,
     secondaryColor: winner.secondaryColor,
     glow,
     uniqueDetail: winner.uniqueDetail,
     preferredPlacement,
     explanation: buildExplanation(winner, ir.emotion, material, condition, scale, animation, glow),
+    materialStyle: winner.appearance?.materialStyle,
   };
 }

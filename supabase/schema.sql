@@ -25,7 +25,8 @@ create table structures (
   x             real not null,
   y             real not null,
 
-  -- [{id, type, localX, localY, occupiedByMemoryId?}] — deep-copied from
+  -- [{id, type, position:{x,y,z}, rotation?, maxScale?, occupiedByMemoryId?}]
+  -- — deep-copied from
   -- STRUCTURE_DEFS at creation time, then mutated in place as objects move
   -- in. Application-owned geometry (pipeline §8) — never touched by the LLM.
   anchors       jsonb not null
@@ -37,9 +38,10 @@ create table memories (
   id            uuid primary key default gen_random_uuid(),
   created_at    timestamptz default now(),
 
-  input_type    text not null check (input_type in ('text','photo','voice')),
+  input_type    text not null check (input_type in ('text','photo','voice','video')),
   raw_text      text,
   input_url     text,
+  media_metadata jsonb,
 
   ir            jsonb not null,
   epitaph       text not null,
@@ -53,19 +55,24 @@ create table memories (
   label               text not null,
   fallback_archetype  text not null,
   grounding_evidence  jsonb not null default '[]',
+  asset_search_terms  jsonb not null default '[]',
+  semantic_tags       jsonb not null default '[]',
 
   -- Render controls, generated as a separate step from symbol identity
   -- (pipeline §12, §19). Keys inside are camelCase, matching the
   -- VisualObjectSpec TS type directly (no snake<->camel mapping layer).
   visual_spec   jsonb not null,
+  -- The selected reusable primitive is separate from semantic identity.
+  -- A fallback asset never rewrites noun/label.
+  visual_representation jsonb not null,
 
   -- Generated-asset pipeline (pipeline §21-23). Step 2.5 (custom
   -- per-memory art generation) isn't implemented yet, so every row stays
   -- render_status='fallback' and generated_asset_url null for now — the
   -- renderer always has the fallback_archetype sprite to draw regardless.
   generated_asset_url  text,
-  render_status        text not null default 'fallback'
-                        check (render_status in ('pending','generated','fallback','failed')),
+  render_status        text not null default 'local_3d'
+                        check (render_status in ('local_3d','pending','generated','fallback','failed')),
 
   candidates    jsonb,
 

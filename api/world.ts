@@ -37,11 +37,11 @@ export async function GET(request: Request): Promise<Response> {
 
   const [minX, maxX, minY, maxY] = [Math.min(x0, x1), Math.max(x0, x1), Math.min(y0, y1), Math.max(y0, y1)];
 
-  const [objectsRes, structuresRes] = await Promise.all([
+  let [objectsRes, structuresRes] = await Promise.all([
     supabase
       .from("memories")
       .select(
-        "id, x, y, category, fallback_archetype, visual_spec, generated_asset_url, render_status, label, epitaph, is_composite, child_count, entity_kind, structure_id, anchor_id"
+        "id, x, y, category, noun, fallback_archetype, visual_spec, visual_representation, generated_asset_url, render_status, label, epitaph, input_type, input_url, raw_text, is_composite, child_count, entity_kind, structure_id, anchor_id"
       )
       .is("parent_id", null)
       .eq("flagged", false)
@@ -59,6 +59,22 @@ export async function GET(request: Request): Promise<Response> {
       .lte("y", maxY)
       .limit(MAX_STRUCTURES),
   ]);
+
+  // Existing deployments can serve the 3D client before migration 005 is
+  // applied. visual_spec already carries assetId/assetPath on new writes;
+  // legacy rows resolve through the registry by fallback_archetype.
+  if (objectsRes.error?.message.includes("visual_representation")) {
+    const legacy = await supabase
+      .from("memories")
+      .select(
+        "id, x, y, category, noun, fallback_archetype, visual_spec, generated_asset_url, render_status, label, epitaph, input_type, input_url, raw_text, is_composite, child_count, entity_kind, structure_id, anchor_id"
+      )
+      .is("parent_id", null)
+      .eq("flagged", false)
+      .gte("x", minX).lte("x", maxX).gte("y", minY).lte("y", maxY)
+      .limit(MAX_ROWS);
+    objectsRes = legacy as typeof objectsRes;
+  }
 
   if (objectsRes.error) {
     console.error("[api/world] memories query failed:", objectsRes.error);

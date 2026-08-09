@@ -16,6 +16,7 @@
 import { moderateText, extractMemoryIR } from "../lib/llm.ts";
 import { scoreCandidates } from "../lib/score.ts";
 import { deriveVisualSpec } from "../lib/visualspec.ts";
+import { retrieveAsset, SCALE_MULTIPLIERS } from "../lib/assetRegistry.ts";
 import { resolvePlacement, markAnchorOccupied } from "../lib/placementPipeline.ts";
 import { supabase } from "../lib/supabase.ts";
 
@@ -308,6 +309,8 @@ async function seedOne(rawText: string, dryRun: boolean, index: number, total: n
         label: "a plain grey stone",
         fallback_archetype: "stone",
         grounding_evidence: [],
+        asset_search_terms: ["stone"],
+        semantic_tags: ["stone", "fallback"],
         visual_spec: {
           material: "stone",
           condition: "worn",
@@ -317,9 +320,16 @@ async function seedOne(rawText: string, dryRun: boolean, index: number, total: n
           glow: 0,
           preferredPlacement: "generic",
           explanation: ["Flagged submission — not interpreted."],
+          assetId: "rock_01",
+          assetPath: "/models/nature/rock.glb",
+          finalScale: 0.56,
+        },
+        visual_representation: {
+          assetId: "rock_01", assetPath: "/models/nature/rock.glb", retrievalTier: "keepsake", retrievalScore: 0,
+          scale: 0.56, colorFamily: "grey", condition: "worn", materialStyle: "rough", animation: "still",
         },
         generated_asset_url: null,
-        render_status: "fallback",
+        render_status: "local_3d",
         entity_kind: "standalone_object",
         environment_tags: [],
         preferred_anchors: [],
@@ -335,14 +345,28 @@ async function seedOne(rawText: string, dryRun: boolean, index: number, total: n
   }
 
   const { ir, source } = await extractMemoryIR(rawText);
-  const { scored, summaryEmbedding } = await scoreCandidates(ir);
+  const { scored, summaryEmbedding } = await scoreCandidates(ir, rawText);
   const winner = scored[0];
   const visualSpec = deriveVisualSpec(winner, ir);
+  const retrieval = retrieveAsset({
+    entityKind: winner.entityKind, noun: winner.noun, label: winner.label,
+    assetSearchTerms: winner.assetSearchTerms, semanticTags: winner.semanticTags,
+    groundingEvidence: winner.groundingEvidence, placementRequirements: winner.placementRequirements,
+    appearance: winner.appearance, behavior: winner.behavior,
+  });
+  const finalScale = retrieval.asset.defaultScale * SCALE_MULTIPLIERS[winner.appearance.scale];
+  const visualRepresentation = {
+    assetId: retrieval.asset.id, assetPath: retrieval.asset.path, retrievalTier: retrieval.tier,
+    retrievalScore: retrieval.score, scale: finalScale, colorFamily: winner.appearance.colorFamily,
+    condition: winner.appearance.condition, materialStyle: winner.appearance.materialStyle,
+    animation: winner.behavior.animation,
+  };
+  Object.assign(visualSpec, { assetId: retrieval.asset.id, assetPath: retrieval.asset.path, finalScale });
   const placement = await resolvePlacement(winner, summaryEmbedding);
 
   console.log(
     `${label} "${rawText.slice(0, 50)}..." -> "${winner.label}" (${winner.entityKind}, fallback: ${winner.fallbackArchetype}) ` +
-      `@ (${placement.x.toFixed(0)},${placement.y.toFixed(0)})` +
+      `asset=${retrieval.asset.id} @ (${placement.x.toFixed(0)},${placement.y.toFixed(0)})` +
       (placement.topAnchor ? ` near ${placement.topAnchor}` : ` in structure ${placement.structure_id}`) +
       ` [${source}]`
   );
@@ -360,9 +384,12 @@ async function seedOne(rawText: string, dryRun: boolean, index: number, total: n
         label: winner.label,
         fallback_archetype: winner.fallbackArchetype,
         grounding_evidence: winner.groundingEvidence,
+        asset_search_terms: winner.assetSearchTerms,
+        semantic_tags: winner.semanticTags,
         visual_spec: visualSpec,
+        visual_representation: visualRepresentation,
         generated_asset_url: null,
-        render_status: "fallback",
+        render_status: "local_3d",
         candidates: scored,
         embedding: summaryEmbedding,
         entity_kind: winner.entityKind,

@@ -27,9 +27,16 @@ const OVERCROWDING_WEIGHT = 0.6;
 
 export function structureAnchorWorldPos(structure: StructureRow, anchor: StructureAnchorState): { x: number; y: number } {
   const def = STRUCTURE_DEFS[structure.template_id];
+  const canonical = def.anchors.find((candidate) => candidate.id === anchor.id);
+  const position = canonical?.position ?? anchor.position;
+  if (position) {
+    // Global placement still uses the existing broad world coordinate
+    // system. Convert the room's ~5x4 metres into its 420x320 footprint.
+    return { x: structure.x + position.x * (def.width / 5), y: structure.y + position.z * (def.height / 4) };
+  }
   return {
-    x: structure.x - def.width / 2 + anchor.localX,
-    y: structure.y - def.height / 2 + anchor.localY,
+    x: structure.x - def.width / 2 + (anchor.localX ?? def.width / 2),
+    y: structure.y - def.height / 2 + (anchor.localY ?? def.height / 2),
   };
 }
 

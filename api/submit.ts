@@ -17,10 +17,12 @@
 // either way, so real placement would be wasted work.
 
 import { supabase } from "../lib/supabase.ts";
-import { extractMemoryIR, moderateText } from "../lib/llm.ts";
+import { extractMemoryIR, moderateContribution } from "../lib/llm.ts";
+import type { GeminiMediaRef } from "../lib/llm.ts";
 import { scoreCandidates } from "../lib/score.ts";
 import { deriveVisualSpec } from "../lib/visualspec.ts";
 import { resolvePlacement, markAnchorOccupied } from "../lib/placementPipeline.ts";
+import { retrieveAsset, SCALE_MULTIPLIERS } from "../lib/assetRegistry.ts";
 
 // Same placeholder object Step 1.1 hardcoded, reused for flagged rows so
 // they still satisfy the NOT NULL symbol-identity columns without doing
@@ -33,6 +35,8 @@ const FLAGGED_PLACEHOLDER = {
   label: "a plain grey stone",
   fallback_archetype: "stone",
   grounding_evidence: [],
+  asset_search_terms: ["stone"],
+  semantic_tags: ["stone", "fallback"],
   visual_spec: {
     material: "stone" as const,
     condition: "worn" as const,
@@ -42,6 +46,20 @@ const FLAGGED_PLACEHOLDER = {
     glow: 0,
     preferredPlacement: "generic" as const,
     explanation: ["Flagged submission — not interpreted."],
+    assetId: "rock_01",
+    assetPath: "/models/nature/rock.glb",
+    finalScale: 0.56,
+  },
+  visual_representation: {
+    assetId: "rock_01",
+    assetPath: "/models/nature/rock.glb",
+    retrievalTier: "keepsake" as const,
+    retrievalScore: 0,
+    scale: 0.56,
+    colorFamily: "grey",
+    condition: "worn" as const,
+    materialStyle: "rough" as const,
+    animation: "still" as const,
   },
   entity_kind: "standalone_object" as const,
   environment_tags: [] as string[],
@@ -49,6 +67,54 @@ const FLAGGED_PLACEHOLDER = {
   structure_id: null,
   anchor_id: null,
 };
+
+function legacyCompatibleRow(row: Record<string, unknown>): Record<string, unknown> {
+  const legacy: Record<string, unknown> = { ...row, render_status: "fallback" };
+  delete legacy.asset_search_terms;
+  delete legacy.semantic_tags;
+  delete legacy.visual_representation;
+  return legacy;
+}
+
+function isPendingAssetMigration(message: string): boolean {
+  return /asset_search_terms|semantic_tags|visual_representation|render_status/i.test(message);
+}
+
+function isPendingMultimodalMigration(message: string): boolean {
+  return /media_metadata|memories_input_type_check/i.test(message);
+}
+
+type InputType = "text" | "photo" | "voice" | "video";
+const INPUT_TYPES = new Set<InputType>(["text", "photo", "voice", "video"]);
+
+function expectedMimePrefix(inputType: InputType): string | null {
+  if (inputType === "photo") return "image/";
+  if (inputType === "voice") return "audio/";
+  if (inputType === "video") return "video/";
+  return null;
+}
+
+function validStoragePath(path: string, inputType: InputType): boolean {
+  if (inputType === "text") return false;
+  return new RegExp(`^${inputType}/\\d{4}-\\d{2}-\\d{2}/[0-9a-f-]{36}\\.[a-z0-9]{1,5}$`).test(path);
+}
+
+async function removeRejectedMedia(storagePath: string, geminiFileName: string): Promise<void> {
+  const removals: Promise<unknown>[] = [
+    supabase.storage.from("contributions").remove([storagePath]),
+  ];
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (apiKey) {
+    removals.push(fetch(`https://generativelanguage.googleapis.com/v1beta/${geminiFileName}`, {
+      method: "DELETE",
+      headers: { "x-goog-api-key": apiKey },
+    }));
+  }
+  const results = await Promise.allSettled(removals);
+  if (results.some((result) => result.status === "rejected")) {
+    console.warn("[api/submit] one or more rejected-media cleanup operations failed");
+  }
+}
 
 export async function POST(request: Request): Promise<Response> {
   let body: unknown;
@@ -61,33 +127,71 @@ export async function POST(request: Request): Promise<Response> {
     });
   }
 
-  const { input_type, raw_text } = (body ?? {}) as Record<string, unknown>;
+  const payload = (body ?? {}) as Record<string, unknown>;
+  const inputType = String(payload.input_type ?? "") as InputType;
+  const rawText = typeof payload.raw_text === "string" ? payload.raw_text.trim().slice(0, 500) : "";
+  const rawMedia = payload.media as Record<string, unknown> | undefined;
+  const media: GeminiMediaRef | undefined = rawMedia ? {
+    fileUri: String(rawMedia.file_uri ?? ""),
+    mimeType: String(rawMedia.mime_type ?? "").toLowerCase(),
+    fileName: String(rawMedia.original_name ?? "media contribution").slice(0, 180),
+  } : undefined;
+  const prefix = INPUT_TYPES.has(inputType) ? expectedMimePrefix(inputType) : null;
+  const validMedia = inputType !== "text" && media
+    && media.fileUri.startsWith("https://generativelanguage.googleapis.com/")
+    && media.mimeType.startsWith(prefix ?? "__invalid__")
+    && /^files\/[a-z0-9-]+$/.test(String(rawMedia?.gemini_file_name ?? ""));
 
-  if (input_type !== "text" || typeof raw_text !== "string" || raw_text.length === 0) {
+  if (!INPUT_TYPES.has(inputType) || (inputType === "text" ? !rawText : !validMedia)) {
     return new Response(
-      JSON.stringify({ error: "expected { input_type: 'text', raw_text: string }" }),
+      JSON.stringify({ error: "expected text, or a completed image/audio/video media upload" }),
       { status: 400, headers: { "content-type": "application/json" } }
     );
   }
 
-  const { flagged } = await moderateText(raw_text);
+  const storagePath = inputType === "text" ? "" : String(rawMedia?.storage_path ?? "");
+  if (inputType !== "text" && !validStoragePath(storagePath, inputType)) {
+    return Response.json({ error: "invalid media storage path" }, { status: 400 });
+  }
+  const inputUrl = inputType === "text"
+    ? null
+    : supabase.storage.from("contributions").getPublicUrl(storagePath).data.publicUrl;
+  const mediaMetadata = inputType === "text" ? null : {
+    mimeType: media!.mimeType,
+    fileName: media!.fileName ?? "media contribution",
+    size: Number(rawMedia?.size ?? 0),
+    storagePath,
+    geminiFileName: String(rawMedia?.gemini_file_name ?? ""),
+  };
+
+  const { flagged } = await moderateContribution(rawText, media);
 
   if (flagged) {
     console.log("[api/submit] moderation flagged submission");
+    if (mediaMetadata) {
+      await removeRejectedMedia(mediaMetadata.storagePath, mediaMetadata.geminiFileName);
+    }
     const flaggedRow = {
-      input_type: "text" as const,
-      raw_text,
+      input_type: inputType,
+      raw_text: rawText || null,
+      input_url: mediaMetadata ? null : inputUrl,
       ir: {},
       epitaph: "",
       ...FLAGGED_PLACEHOLDER,
       generated_asset_url: null,
-      render_status: "fallback" as const,
+      render_status: "local_3d" as const,
       x: Math.random() * 1000 - 500,
       y: Math.random() * 1000 - 500,
       flagged: true,
     };
 
-    const { error: flaggedInsertError } = await supabase.from("memories").insert(flaggedRow);
+    let { error: flaggedInsertError } = await supabase.from("memories").insert(flaggedRow);
+    if (flaggedInsertError && isPendingAssetMigration(flaggedInsertError.message)) {
+      ({ error: flaggedInsertError } = await supabase.from("memories").insert(legacyCompatibleRow(flaggedRow)));
+    }
+    if (flaggedInsertError && inputType !== "text" && isPendingMultimodalMigration(flaggedInsertError.message)) {
+      return Response.json({ error: "Apply Supabase migration 006 before placing media." }, { status: 503 });
+    }
     if (flaggedInsertError) {
       console.error("[api/submit] flagged insert failed:", flaggedInsertError);
       return new Response(JSON.stringify({ error: flaggedInsertError.message }), {
@@ -102,10 +206,10 @@ export async function POST(request: Request): Promise<Response> {
     });
   }
 
-  const { ir, source } = await extractMemoryIR(raw_text);
+  const { ir, source } = await extractMemoryIR(rawText, media);
   console.log(`[api/submit] IR source: ${source}`);
 
-  const { scored, summaryEmbedding } = await scoreCandidates(ir);
+  const { scored, summaryEmbedding } = await scoreCandidates(ir, rawText);
   console.table(
     scored.map((c) => ({
       noun: c.noun,
@@ -115,12 +219,38 @@ export async function POST(request: Request): Promise<Response> {
       emotionalFit: c.emotionalFit.toFixed(3),
       visualSuitability: c.visualSuitability.toFixed(3),
       novelty: c.novelty.toFixed(3),
+      groundingPenalty: c.groundingPenalty.toFixed(3),
       finalScore: c.finalScore.toFixed(3),
     }))
   );
   const winner = scored[0];
 
   const visualSpec = deriveVisualSpec(winner, ir);
+  const retrieval = retrieveAsset({
+    entityKind: winner.entityKind,
+    noun: winner.noun,
+    label: winner.label,
+    assetSearchTerms: winner.assetSearchTerms,
+    semanticTags: winner.semanticTags,
+    groundingEvidence: winner.groundingEvidence,
+    placementRequirements: winner.placementRequirements,
+    appearance: winner.appearance,
+    behavior: winner.behavior,
+  });
+  const finalScale = retrieval.asset.defaultScale * SCALE_MULTIPLIERS[winner.appearance.scale];
+  const visualRepresentation = {
+    assetId: retrieval.asset.id,
+    assetPath: retrieval.asset.path,
+    retrievalTier: retrieval.tier,
+    retrievalScore: retrieval.score,
+    scale: finalScale,
+    colorFamily: winner.appearance.colorFamily,
+    condition: winner.appearance.condition,
+    materialStyle: winner.appearance.materialStyle,
+    animation: winner.behavior.animation,
+  };
+  Object.assign(visualSpec, { assetId: retrieval.asset.id, assetPath: retrieval.asset.path, finalScale });
+  console.log(`[api/submit] asset=${retrieval.asset.id} tier=${retrieval.tier} score=${retrieval.score.toFixed(3)}`);
 
   const placement = await resolvePlacement(winner, summaryEmbedding);
   console.log(
@@ -130,8 +260,10 @@ export async function POST(request: Request): Promise<Response> {
   );
 
   const row = {
-    input_type: "text" as const,
-    raw_text,
+    input_type: inputType,
+    raw_text: rawText || null,
+    input_url: inputUrl,
+    ...(mediaMetadata ? { media_metadata: mediaMetadata } : {}),
     ir,
     epitaph: ir.epitaph,
     category: winner.category,
@@ -139,9 +271,12 @@ export async function POST(request: Request): Promise<Response> {
     label: winner.label,
     fallback_archetype: winner.fallbackArchetype,
     grounding_evidence: winner.groundingEvidence,
+    asset_search_terms: winner.assetSearchTerms,
+    semantic_tags: winner.semanticTags,
     visual_spec: visualSpec,
+    visual_representation: visualRepresentation,
     generated_asset_url: null,
-    render_status: "fallback" as const, // Step 2.5 (generated asset pipeline) not implemented yet
+    render_status: "local_3d" as const,
     candidates: scored,
     embedding: summaryEmbedding,
     entity_kind: winner.entityKind,
@@ -153,7 +288,15 @@ export async function POST(request: Request): Promise<Response> {
     y: placement.y,
   };
 
-  const { data, error } = await supabase.from("memories").insert(row).select().single();
+  let { data, error } = await supabase.from("memories").insert(row).select().single();
+  if (error && isPendingAssetMigration(error.message)) {
+    console.warn("[api/submit] migration 005 pending; persisting 3D selection inside visual_spec compatibility fields");
+    ({ data, error } = await supabase.from("memories").insert(legacyCompatibleRow(row)).select().single());
+  }
+
+  if (error && inputType !== "text" && isPendingMultimodalMigration(error.message)) {
+    return Response.json({ error: "Apply Supabase migration 006 before placing media." }, { status: 503 });
+  }
 
   if (error) {
     console.error("[api/submit] insert failed:", error);

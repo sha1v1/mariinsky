@@ -17,15 +17,29 @@ import {
 } from "./ontology.ts";
 import type { SymbolCategory, FallbackArchetype, EntityKind, AnchorType, StructureTemplateId } from "./ontology.ts";
 import type { MemoryIR, SymbolCandidateDraft, PlacementRequirements, StructureSuggestion } from "./types.ts";
+import type { AppearanceSpec, BehaviorSpec } from "./types.ts";
 import { snapToNearest, clamp01, hashString, mulberry32, pick } from "./util.ts";
 
 const MODEL = "gemini-3.5-flash"; // TEMP: gemini-3.5-flash-lite hit its daily free-tier quota; testing with the sibling model, which has a separate per-model quota bucket
+
+const APPEARANCE_SCALES = ["tiny", "miniature", "small", "medium", "large"] as const;
+const APPEARANCE_CONDITIONS = ["new", "worn", "aged", "faded", "weathered", "pristine"] as const;
+const MATERIAL_STYLES = ["matte", "rough", "glossy", "soft", "metallic", "neutral"] as const;
+const BEHAVIORS = ["still", "gentle_sway", "slow_breathing", "bob", "pulse", "flicker", "drift"] as const;
+const TIME_CONTEXTS = ["past", "present", "ongoing", "future", "timeless"] as const;
+
+export interface GeminiMediaRef {
+  fileUri: string;
+  mimeType: string;
+  fileName?: string;
+}
 
 const IR_SCHEMA = {
   type: "OBJECT",
   properties: {
     summary: { type: "STRING" },
     epitaph: { type: "STRING" },
+    timeContext: { type: "STRING", enum: TIME_CONTEXTS as unknown as string[] },
     literal_anchors: { type: "ARRAY", items: { type: "STRING" } },
     themes: { type: "ARRAY", items: { type: "STRING" } },
     emotion: {
@@ -56,11 +70,28 @@ const IR_SCHEMA = {
           label: { type: "STRING" },
           fallbackArchetype: { type: "STRING", enum: FALLBACK_ARCHETYPES },
           groundingEvidence: { type: "ARRAY", items: { type: "STRING" } },
+          assetSearchTerms: { type: "ARRAY", items: { type: "STRING" } },
+          semanticTags: { type: "ARRAY", items: { type: "STRING" } },
           emotionalFit: { type: "NUMBER" },
           visualSuitability: { type: "NUMBER" },
           primaryColor: { type: "STRING" },
           secondaryColor: { type: "STRING" },
           uniqueDetail: { type: "STRING" },
+          appearance: {
+            type: "OBJECT",
+            properties: {
+              colorFamily: { type: "STRING" },
+              scale: { type: "STRING", enum: APPEARANCE_SCALES as unknown as string[] },
+              condition: { type: "STRING", enum: APPEARANCE_CONDITIONS as unknown as string[] },
+              materialStyle: { type: "STRING", enum: MATERIAL_STYLES as unknown as string[] },
+            },
+            required: ["scale", "condition"],
+          },
+          behavior: {
+            type: "OBJECT",
+            properties: { animation: { type: "STRING", enum: BEHAVIORS as unknown as string[] } },
+            required: ["animation"],
+          },
           entityKind: { type: "STRING", enum: ENTITY_KINDS as unknown as string[] },
           placementRequirements: {
             type: "OBJECT",
@@ -83,23 +114,30 @@ const IR_SCHEMA = {
         },
         required: [
           "category", "noun", "label", "fallbackArchetype",
-          "groundingEvidence", "emotionalFit", "visualSuitability", "primaryColor",
+          "groundingEvidence", "assetSearchTerms", "semanticTags", "emotionalFit", "visualSuitability", "primaryColor",
+          "appearance", "behavior",
           "entityKind", "placementRequirements",
         ],
       },
     },
   },
   required: [
-    "summary", "epitaph", "literal_anchors", "themes",
+    "summary", "epitaph", "timeContext", "literal_anchors", "themes",
     "emotion", "setting", "candidates",
   ],
 };
 
-const PROMPT_INSTRUCTIONS = `You turn a short personal memory into a structured interpretation (a "Memory IR") for a symbolic-object generator.
+const PROMPT_INSTRUCTIONS = `You turn a short personal contribution into a structured interpretation for a shared 3D scene. A contribution may describe a past memory, a present observation, something happening right now, or a future plan. Do not assume it is nostalgic.
 
 RULES:
-- The symbolic object's noun and label are OPEN VOCABULARY. You may choose any concrete object, creature, plant, architectural element, or natural entity that best represents the memory — you are NOT restricted to any fixed list. Prefer a specific object grounded in a distinctive detail from the memory (e.g. "a slightly melted purple crayon") over a generic emotional metaphor (e.g. never default love->heart, sadness->wilted flower, nostalgia->candle).
-- noun/label are chosen by MEANING, not by literal sentiment. Ask: what concrete, specific thing does this memory actually evoke?
+- The entity's noun and label are OPEN VOCABULARY. You may choose any concrete object, creature, plant, architectural element, or natural entity that best represents the contribution — you are NOT restricted to any fixed list. Prefer a specific entity grounded in a distinctive detail (e.g. "a slightly melted purple crayon") over a generic emotional metaphor (e.g. never default love->heart, sadness->wilted flower, nostalgia->candle).
+- noun/label are chosen by grounded meaning, not by sentiment. Ask: what concrete, specific thing is the contributor actually describing or experiencing?
+- Set timeContext to past, present, ongoing, future, or timeless from the contributor's wording. Preserve tense. "Today", "currently", "right now", "I am going", and "tomorrow" are strong evidence that this is not a nostalgic recollection.
+- Past tense does not automatically imply a keepsake. Whether something happened ten years ago or ten seconds ago, prefer the concrete subject actually described.
+- For a short, direct observation (for example "I went to the zoo today and saw deer"), the most salient thing actually witnessed ("deer") MUST be the first candidate and should normally remain the symbol. Do not invent a souvenir, ticket, token, map, statue, photograph, or keepsake unless the memory explicitly mentions one. Sparse everyday memories do not imply nostalgia or an imagined artifact.
+- When media is attached, inspect its visible and/or audible contents as the primary evidence. Represent the concrete subject, place, creature, object, or event present in that evidence. Do not turn an ordinary image or video into a camera, photograph, frame, screen, recording, token, or souvenir merely because it arrived as media.
+- A caption may describe the past, the present, or what the contributor is currently doing. Use it as context for the media without inventing a completed recollection. If the caption and media differ, stay grounded in what can actually be supported by either source and avoid fabricating unseen details.
+- Literal grounding outranks decorative cleverness. A candidate whose core noun occurs in the memory should outrank one that merely repeats the setting as an adjective ("deer" outranks an invented "zoo token").
 - Produce exactly 5 candidates, ranked by fit, each with a genuinely different noun.
 - Every candidate must ALSO include a "category" (one of: ${SYMBOL_CATEGORIES.join(", ")}) and a "fallbackArchetype" chosen from this fixed list, grouped by category:
 ${Object.entries(FALLBACK_ARCHETYPES_BY_CATEGORY)
@@ -107,32 +145,44 @@ ${Object.entries(FALLBACK_ARCHETYPES_BY_CATEGORY)
   .join("\n")}
   The fallbackArchetype is ONLY a rendering safety net used if custom art generation fails — it is never the actual meaning of the memory. Pick whichever fallback archetype is visually closest to your chosen noun, even if it's a loose match.
 - groundingEvidence: 1-2 short quotes/paraphrases from the memory that justify this candidate.
+- assetSearchTerms: 3-5 short, concrete retrieval phrases ordered from exact to broader (for example ["reindeer", "deer", "toy deer"]). Never return an asset filename, path, or id. The application chooses the asset.
+- semanticTags: 3-7 open descriptive tags covering context, themes, and object family. These are search hints, not an ontology.
 - emotionalFit (0-1): how well this object's *form* could carry the memory's emotional character.
 - visualSuitability (0-1): how clearly this object could exist as a standalone rendered world object.
 - primaryColor (required) and secondaryColor (optional): free-text descriptive color phrases for THIS specific object (e.g. "muted burgundy", "aged brass"), not hex codes. These are the one part of how the object looks that only you can invent — material/condition/scale/animation are decided separately afterward by a fixed rule, so don't worry about those here.
 - uniqueDetail (optional): one short, specific visual detail that makes this exact object distinctive (e.g. "one ear is slightly folded").
+- appearance: high-level art direction only. colorFamily is an ordinary descriptive color phrase; scale is one of ${APPEARANCE_SCALES.join(", ")}; condition is one of ${APPEARANCE_CONDITIONS.join(", ")}; materialStyle is one of ${MATERIAL_STYLES.join(", ")}. Do not provide numeric materials, transforms, or physical dimensions.
+- behavior.animation is one of ${BEHAVIORS.join(", ")}. Prefer still unless gentle motion is physically or symbolically appropriate.
 - entityKind (one of: ${ENTITY_KINDS.join(", ")}) and placementRequirements classify how this thing exists in physical space — a SEPARATE question from what it means:
   - "creature" / "plant": animals, plants. Almost always canExistStandalone: true.
   - "environment_feature": ponds, rocks, streams, paths. Almost always canExistStandalone: true.
   - "standalone_object": a complete object that makes sense on its own with no support needed (a house key, a crayon, a cassette tape). canExistStandalone: true.
   - "supported_object": an object that needs a surface or container to make physical sense (a lamp needs a table, a toy needs a shelf/windowsill, a framed photo needs a wall). canExistStandalone: false. Set preferredAnchors to 1-3 values from: ${ANCHOR_TYPES.join(", ")} (ordered by preference), and environmentTags to a few open descriptive words for what kind of place fits (e.g. "interior", "domestic", "work", "academic", "outdoor").
-  - "structure": the memory is fundamentally ABOUT a place/room/building itself, not an object within it (e.g. the memory is about a whole classroom, a childhood bedroom, an office). canExistStandalone: true. Include structureSuggestion.
+  - "structure": the contribution is fundamentally ABOUT a place/room/building itself, not an object within it (e.g. a whole classroom, bedroom, office, or garden). canExistStandalone: true. Include structureSuggestion.
   - CRITICAL RULE — architectural fragments (a window, a door, a shelf, a staircase, a desk-as-part-of-a-room) must NOT normally become the noun of a standalone entity, because they are structurally incoherent floating alone (a window with no wall isn't "a window out of context," it's not a coherent object at all). When a memory strongly evokes one of these, prefer ONE of:
     (a) treat it as a "supported_object" whose noun is still the specific thing (e.g. noun: "the windowsill decoration", or noun the actual small object sitting there) with an appropriate preferredAnchor (e.g. "windowsill" for a window-adjacent memory), letting it attach to a larger place rather than float alone, or
     (b) if the memory is really about the ROOM or PLACE itself, promote it to entityKind "structure" with a noun describing the whole place (e.g. "childhood bedroom" instead of "window"), and list the fragment in structureSuggestion.featuredElements (e.g. ["window"]).
     Do not over-apply this — a genuinely complete, self-supporting piece of furniture (a chair, a bookcase, a desk as an object, a bench) is still fine as a standalone/supported_object noun.
 - structureSuggestion (only when entityKind is "structure", or optionally to hint at a supported_object's ideal container): semanticType is an open-text description of the place (e.g. "a small late-night university computer lab"); preferredTemplate is your best-fit guess from this FIXED list: ${STRUCTURE_TEMPLATES.join(", ")} (application code maps this to actual room geometry — pick the closest even if imperfect); featuredElements lists notable fragments/details visible in the place (e.g. ["window", "bookshelf"]).
 - emotion values (valence, arousal, nostalgia) are each a number from 0 to 1.
-- literal_anchors are concrete nouns/phrases pulled directly from the memory text.
+- literal_anchors are concrete nouns/phrases pulled directly from the contribution text.
 - epitaph is a short, evocative phrase naming the object (e.g. "a reindeer on the window ledge").
 
 Return only the structured JSON, no other text.
 
-MEMORY:
+CONTRIBUTION CAPTION (may be empty; attached media is primary evidence):
 `;
 
 function buildPrompt(rawText: string): string {
   return PROMPT_INSTRUCTIONS + rawText;
+}
+
+function inferExplicitTimeContext(rawText: string): MemoryIR["timeContext"] | null {
+  const text = rawText.toLowerCase();
+  if (/\b(currently|right now|at the moment|today)\b/.test(text) || /\bi(?:'m| am)\s+(?:going|seeing|visiting|watching|walking|sitting|standing)\b/.test(text)) return "ongoing";
+  if (/\b(tomorrow|next week|next month|will|planning to)\b/.test(text)) return "future";
+  if (/\b(yesterday|last week|last month|last year|used to|remember|remembered|ago)\b/.test(text)) return "past";
+  return null;
 }
 
 // --- server-side validation / enum-repair -----------------------------------
@@ -180,6 +230,26 @@ function validateStructureSuggestion(raw: unknown): StructureSuggestion | undefi
   };
 }
 
+function memberOrFirst<T extends readonly string[]>(value: unknown, allowed: T, fallback: T[number]): T[number] {
+  const normalized = String(value ?? "");
+  return (allowed as readonly string[]).includes(normalized) ? normalized as T[number] : fallback;
+}
+
+function validateAppearance(raw: unknown, fallbackColor: string): AppearanceSpec {
+  const value = (raw ?? {}) as Record<string, unknown>;
+  return {
+    colorFamily: String(value.colorFamily ?? fallbackColor).trim() || fallbackColor,
+    scale: memberOrFirst(value.scale, APPEARANCE_SCALES, "small"),
+    condition: memberOrFirst(value.condition, APPEARANCE_CONDITIONS, "worn"),
+    materialStyle: memberOrFirst(value.materialStyle, MATERIAL_STYLES, "neutral"),
+  };
+}
+
+function validateBehavior(raw: unknown): BehaviorSpec {
+  const value = (raw ?? {}) as Record<string, unknown>;
+  return { animation: memberOrFirst(value.animation, BEHAVIORS, "still") };
+}
+
 function validateAndFixIR(raw: unknown): MemoryIR {
   const r = raw as Record<string, unknown>;
   const rawCandidates = Array.isArray(r.candidates) ? r.candidates : [];
@@ -207,6 +277,13 @@ function validateAndFixIR(raw: unknown): MemoryIR {
     const entityKind = snapToNearest(String(cand.entityKind ?? ""), ENTITY_KINDS) as EntityKind;
     const placementRequirements = validatePlacementRequirements(cand.placementRequirements, entityKind);
     const structureSuggestion = validateStructureSuggestion(cand.structureSuggestion);
+    const primaryColor = String(cand.primaryColor ?? "").trim() || "grey";
+    const assetSearchTerms = Array.isArray(cand.assetSearchTerms)
+      ? cand.assetSearchTerms.map(String).map((s) => s.trim()).filter(Boolean).slice(0, 8)
+      : [];
+    const semanticTags = Array.isArray(cand.semanticTags)
+      ? cand.semanticTags.map(String).map((s) => s.trim()).filter(Boolean).slice(0, 12)
+      : [];
 
     return {
       category,
@@ -214,11 +291,15 @@ function validateAndFixIR(raw: unknown): MemoryIR {
       label,
       fallbackArchetype: fallbackArchetype as FallbackArchetype,
       groundingEvidence,
+      assetSearchTerms: assetSearchTerms.length > 0 ? assetSearchTerms : [noun],
+      semanticTags,
       emotionalFit: clamp01(cand.emotionalFit),
       visualSuitability: clamp01(cand.visualSuitability),
-      primaryColor: String(cand.primaryColor ?? "").trim() || "grey",
+      primaryColor,
       secondaryColor: cand.secondaryColor ? String(cand.secondaryColor).trim() || undefined : undefined,
       uniqueDetail: cand.uniqueDetail ? String(cand.uniqueDetail).trim() || undefined : undefined,
+      appearance: validateAppearance(cand.appearance, primaryColor),
+      behavior: validateBehavior(cand.behavior),
       entityKind,
       placementRequirements,
       ...(structureSuggestion ? { structureSuggestion } : {}),
@@ -235,6 +316,7 @@ function validateAndFixIR(raw: unknown): MemoryIR {
   return {
     summary: String(r.summary ?? ""),
     epitaph: String(r.epitaph ?? ""),
+    timeContext: memberOrFirst(r.timeContext, TIME_CONTEXTS, "timeless"),
     literal_anchors: Array.isArray(r.literal_anchors) ? r.literal_anchors.map(String) : [],
     themes: Array.isArray(r.themes) ? r.themes.map(String) : [],
     emotion: {
@@ -289,14 +371,27 @@ async function fetchGeminiWithRetry(url: string, body: unknown): Promise<Respons
   return res;
 }
 
-export async function callGeminiJSON(prompt: string, schema: object, safetySettings?: unknown): Promise<unknown> {
+export async function callGeminiJSON(
+  prompt: string,
+  schema: object,
+  safetySettings?: unknown,
+  media?: GeminiMediaRef,
+): Promise<unknown> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY not set");
+
+  const textPart = { text: prompt };
+  const mediaPart = media ? { fileData: { fileUri: media.fileUri, mimeType: media.mimeType } } : null;
+  // Google's guidance differs slightly by modality: text first for a
+  // single image, media first for video/audio. Preserve that ordering.
+  const parts = !mediaPart ? [textPart]
+    : media?.mimeType.startsWith("image/") ? [textPart, mediaPart]
+    : [mediaPart, textPart];
 
   const res = await fetchGeminiWithRetry(
     `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`,
     {
-      contents: [{ parts: [{ text: prompt }] }],
+      contents: [{ parts }],
       generationConfig: {
         responseMimeType: "application/json",
         responseSchema: schema,
@@ -317,9 +412,11 @@ export async function callGeminiJSON(prompt: string, schema: object, safetySetti
   return JSON.parse(text);
 }
 
-async function callGemini(rawText: string): Promise<MemoryIR> {
-  const raw = await callGeminiJSON(buildPrompt(rawText), IR_SCHEMA);
-  return validateAndFixIR(raw);
+async function callGemini(rawText: string, media?: GeminiMediaRef): Promise<MemoryIR> {
+  const raw = await callGeminiJSON(buildPrompt(rawText), IR_SCHEMA, undefined, media);
+  const ir = validateAndFixIR(raw);
+  const explicitTime = inferExplicitTimeContext(rawText);
+  return explicitTime ? { ...ir, timeContext: explicitTime } : ir;
 }
 
 // --- deterministic fallback --------------------------------------------------
@@ -381,11 +478,20 @@ function fallbackIR(rawText: string): MemoryIR {
     label: `a ${archetype}`,
     fallbackArchetype: archetype,
     groundingEvidence: i === 0 ? ["fallback keyword match against the raw memory text"] : ["fallback candidate — no LLM available"],
+    assetSearchTerms: [archetype],
+    semanticTags: [categoryForFallbackArchetype(archetype) ?? "object"],
     emotionalFit: rand(),
     visualSuitability: rand(),
     primaryColor: pick(FALLBACK_COLORS, rand),
     secondaryColor: pick(FALLBACK_COLORS, rand),
     uniqueDetail: pick(FALLBACK_DETAILS, rand),
+    appearance: {
+      colorFamily: pick(FALLBACK_COLORS, rand),
+      scale: pick(APPEARANCE_SCALES, rand),
+      condition: pick(APPEARANCE_CONDITIONS, rand),
+      materialStyle: pick(MATERIAL_STYLES, rand),
+    },
+    behavior: { animation: "still" as const },
     entityKind: "standalone_object" as const,
     placementRequirements: { canExistStandalone: true, environmentTags: [], preferredAnchors: [] },
   }));
@@ -393,6 +499,7 @@ function fallbackIR(rawText: string): MemoryIR {
   return {
     summary: rawText,
     epitaph: rawText.slice(0, 40),
+    timeContext: inferExplicitTimeContext(rawText) ?? "timeless",
     literal_anchors: [],
     themes: [],
     emotion: { valence: rand(), arousal: rand(), nostalgia: rand() },
@@ -408,15 +515,17 @@ function fallbackIR(rawText: string): MemoryIR {
 // --- public entry point ------------------------------------------------------
 
 export async function extractMemoryIR(
-  rawText: string
+  rawText: string,
+  media?: GeminiMediaRef,
 ): Promise<{ ir: MemoryIR; source: "llm" | "fallback" }> {
   try {
-    const ir = await callGemini(rawText);
+    const ir = await callGemini(rawText, media);
     console.log("[llm] IR extraction: llm");
     return { ir, source: "llm" };
   } catch (err) {
     console.error("[llm] Gemini call failed, using fallback:", err);
-    return { ir: fallbackIR(rawText), source: "fallback" };
+    const fallbackText = rawText.trim() || media?.fileName || "media contribution";
+    return { ir: fallbackIR(fallbackText), source: "fallback" };
   }
 }
 
@@ -455,7 +564,7 @@ const MODERATION_SCHEMA = {
   required: ["flagged", "reason"],
 };
 
-const MODERATION_PROMPT = `You are a content moderation classifier for a public, unauthenticated art installation where strangers submit short personal memories, which get turned into symbolic objects in a shared world.
+const MODERATION_PROMPT = `You are a content moderation classifier for a public, unauthenticated art installation where strangers submit text, images, audio, or video, which get interpreted as objects in a shared world. Judge the caption and any attached media together.
 
 Flag (flagged: true) content that is itself: a direct threat of violence, harassment or targeted abuse, hate speech, sexual content involving minors, or otherwise clearly inappropriate for public display.
 
@@ -463,7 +572,7 @@ Do NOT flag content just because it is sad, dark, or difficult — memories of g
 
 Respond with structured JSON only: {"flagged": boolean, "reason": string}.
 
-TEXT:
+CAPTION:
 `;
 
 const MODERATION_SAFETY_SETTINGS = [
@@ -473,7 +582,7 @@ const MODERATION_SAFETY_SETTINGS = [
   "HARM_CATEGORY_DANGEROUS_CONTENT",
 ].map((category) => ({ category, threshold: "BLOCK_NONE" }));
 
-export async function moderateText(rawText: string): Promise<{ flagged: boolean }> {
+export async function moderateContribution(rawText: string, media?: GeminiMediaRef): Promise<{ flagged: boolean }> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     console.error("[moderate] GEMINI_API_KEY not set — failing closed (flagged=true)");
@@ -482,9 +591,10 @@ export async function moderateText(rawText: string): Promise<{ flagged: boolean 
 
   try {
     const parsed = (await callGeminiJSON(
-      MODERATION_PROMPT + rawText,
+      `${MODERATION_PROMPT}${rawText || "[No caption — assess the attached media.]"}`,
       MODERATION_SCHEMA,
-      MODERATION_SAFETY_SETTINGS
+      MODERATION_SAFETY_SETTINGS,
+      media,
     )) as { flagged?: unknown; reason?: unknown };
 
     const flagged = Boolean(parsed.flagged);
@@ -494,4 +604,8 @@ export async function moderateText(rawText: string): Promise<{ flagged: boolean 
     console.error("[moderate] call failed, failing closed (flagged=true):", err);
     return { flagged: true };
   }
+}
+
+export async function moderateText(rawText: string): Promise<{ flagged: boolean }> {
+  return moderateContribution(rawText);
 }

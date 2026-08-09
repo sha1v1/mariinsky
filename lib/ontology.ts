@@ -156,11 +156,14 @@ export const STRUCTURE_TEMPLATE_FALLBACK_MAP: Record<StructureTemplateId, Implem
 export interface StructureAnchorDef {
   id: string;
   type: AnchorType;
-  // Local coordinates relative to the structure's own top-left corner,
-  // in world units — application-owned geometry (pipeline §8), never
-  // inferred from a generated image.
-  localX: number;
-  localY: number;
+  // True 3D coordinates in structure-local metres. Application-owned and
+  // deliberately absent from the LLM contract.
+  position: { x: number; y: number; z: number };
+  rotation?: { x: number; y: number; z: number };
+  maxScale?: number;
+  // Read compatibility for pre-3D rows already persisted in Supabase.
+  localX?: number;
+  localY?: number;
 }
 
 export interface StructureTemplateDef {
@@ -182,11 +185,11 @@ export const STRUCTURE_DEFS: Record<ImplementedStructureTemplateId, StructureTem
     width: 420,
     height: 320,
     anchors: [
-      { id: "window-left", type: "windowsill", localX: 60, localY: 90 },
-      { id: "table-main", type: "table", localX: 220, localY: 210 },
-      { id: "shelf-upper", type: "shelf", localX: 340, localY: 100 },
-      { id: "floor-left", type: "floor", localX: 100, localY: 260 },
-      { id: "floor-right", type: "floor", localX: 320, localY: 260 },
+      { id: "window-left", type: "windowsill", position: { x: -1.65, y: 1.25, z: -1.7 }, maxScale: 0.75 },
+      { id: "table-main", type: "table", position: { x: 0.35, y: 1.02, z: 0.15 }, maxScale: 0.8 },
+      { id: "shelf-upper", type: "shelf", position: { x: 1.75, y: 1.38, z: -1.72 }, maxScale: 0.65 },
+      { id: "floor-left", type: "floor", position: { x: -1.25, y: 0.01, z: -0.75 }, maxScale: 1.1 },
+      { id: "floor-right", type: "floor", position: { x: 1.35, y: 0.01, z: -0.8 }, maxScale: 1.1 },
     ],
   },
   office: {
@@ -194,11 +197,11 @@ export const STRUCTURE_DEFS: Record<ImplementedStructureTemplateId, StructureTem
     width: 420,
     height: 320,
     anchors: [
-      { id: "desk-main", type: "desk", localX: 210, localY: 200 },
-      { id: "chair-main", type: "chair", localX: 210, localY: 240 },
-      { id: "shelf-side", type: "shelf", localX: 60, localY: 100 },
-      { id: "window-back", type: "windowsill", localX: 340, localY: 80 },
-      { id: "floor-front", type: "floor", localX: 210, localY: 280 },
+      { id: "desk-main", type: "desk", position: { x: 0.15, y: 1.0, z: 0.45 }, maxScale: 0.8 },
+      { id: "chair-main", type: "chair", position: { x: 0.15, y: 0.52, z: -0.65 }, maxScale: 0.8 },
+      { id: "shelf-side", type: "shelf", position: { x: -1.72, y: 1.35, z: -1.65 }, maxScale: 0.65 },
+      { id: "window-back", type: "windowsill", position: { x: 1.65, y: 1.28, z: -1.7 }, maxScale: 0.7 },
+      { id: "floor-front", type: "floor", position: { x: 1.25, y: 0.01, z: -0.92 }, maxScale: 1.1 },
     ],
   },
 };
