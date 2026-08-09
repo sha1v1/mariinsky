@@ -26,10 +26,17 @@
   --faint:      #a5a0ad;
   --hairline:   #e6e1d5;
 
-  /* the void, for the inside of a memory */
+  /* The void, for the inside of a memory. The collection's palette inverts
+     rather than being replaced: the same hierarchy of ink → dim → faint →
+     hairline, read the other way up. Nothing in here is tinted on purpose —
+     every accent inside a memory is the memory's own colour, var(--glow). */
   --void:       #08070d;
+  --void-deep:  #050409;
   --void-ink:   #ece9f4;
+  --void-dim:   #9d98b4;
   --void-faint: #55516b;
+  --void-edge:  rgba(160, 152, 200, 0.16);
+  --void-panel: rgba(20, 18, 32, 0.82);
 
   /* the two i-dots of the wordmark, the printed border, and the hand-written
      subtitle: the only fixed accents in the app. everything else that is
@@ -179,6 +186,12 @@ a { color: inherit; text-decoration: none; }
    a merely transparent masthead would still swallow clicks aimed at the card
    underneath it. */
 body.overlay-on .masthead { opacity: 0; visibility: hidden; pointer-events: none; }
+
+/* The printed border is the edge of the page, and it sits above the overlay so
+   that a card laid on the collection is still framed by it. A memory is not on
+   the page though -- it takes the whole screen -- so in there the frame goes
+   with the rest of the paper. */
+body.immersive .frame { opacity: 0; visibility: hidden; transition: opacity 0.4s, visibility 0.4s; }
 
 /* ------------------------------------------------------- the collection --- */
 
@@ -519,13 +532,14 @@ body.overlay-on .masthead { opacity: 0; visibility: hidden; pointer-events: none
 #overlay { position: fixed; inset: 0; z-index: 50; pointer-events: none; }
 #overlay.on { pointer-events: auto; }
 
-.orbmodal, .addmodal {
+/* the contribution card is still a card over the page: the contents are centred
+   by the grid, so they stay centred at every size and through every resize
+   without anything being measured */
+.addmodal {
   position: fixed;
   inset: 0;
   display: grid;
   place-items: center;
-  /* the contents are centred by the grid, so they stay centred at every size
-     and through every resize without anything being measured */
 }
 
 /* frosted glass over the collection: blurred, but still bright and still
@@ -542,17 +556,137 @@ body.overlay-on .masthead { opacity: 0; visibility: hidden; pointer-events: none
 
 /* ---------------------------------------------------- a memory, opened --- */
 
+/* Not a card over the page any more. The collection is a bright thing you look
+   at; a memory is somewhere you go into, so it takes the whole screen and the
+   paper goes out entirely. Three rows: chrome, the glass, the history. The
+   glass gets all the space that is left. */
+.orbscene {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  color: var(--void-ink);
+  animation: fadein 0.5s ease both;
+}
+
+.orbveil {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(1000px 760px at 24% 10%, color-mix(in srgb, var(--g1) 16%, transparent), transparent 66%),
+    radial-gradient(900px 700px at 80% 88%, color-mix(in srgb, var(--g2) 13%, transparent), transparent 64%),
+    var(--void);
+}
+
+.orbscene > .hud,
+.orbscene > .stagewrap,
+.orbscene > .timeline { position: relative; z-index: 2; }
+
+/* --- the quiet chrome ---------------------------------------------------- */
+
+/* The controls exist but do not insist. They settle out of the way a few
+   seconds after you stop moving and come straight back when you do, so the
+   memory is uninterrupted while you watch it and fully operable the instant
+   you want something. `visibility` as well as opacity: a merely transparent
+   bar still swallows a pointer aimed at the glass behind it. */
+.hud, .timeline {
+  transition: opacity 0.55s ease, visibility 0.55s, transform 0.55s ease;
+}
+.orbscene.calm .hud {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-6px);
+}
+.orbscene.calm .timeline {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(6px);
+}
+
+.hud {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 1.1rem 1.4rem;
+}
+.hud-actions { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; justify-content: flex-end; }
+
+/* the collection's pill button, read the other way up */
+.hudbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--void-edge);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--void-dim);
+  font-size: 0.85rem;
+  transition: color 0.18s, border-color 0.18s, background 0.18s;
+}
+.hudbtn:hover {
+  color: var(--void-ink);
+  border-color: color-mix(in srgb, var(--glow) 45%, transparent);
+  background: rgba(255, 255, 255, 0.06);
+}
+.hudbtn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* the one action that costs the memory something wears the marker hand, the
+   same way "add a memory" does out on the page */
+.hudbtn-solid {
+  background: color-mix(in srgb, var(--glow) 20%, transparent);
+  border-color: color-mix(in srgb, var(--glow) 52%, transparent);
+  color: color-mix(in srgb, var(--glow) 40%, white);
+  font-family: var(--marker);
+  font-size: 1rem;
+  letter-spacing: 0.03em;
+  padding: 0.5rem 1.2rem;
+}
+.hudbtn-solid:hover {
+  background: color-mix(in srgb, var(--glow) 32%, transparent);
+  box-shadow: 0 0 28px -8px var(--glow);
+  color: #fff;
+}
+
+/* --- the glass ----------------------------------------------------------- */
+
+.stagewrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  padding: 0.5rem 1.4rem 1rem;
+}
+
+/* Sphere and caption are one flow column rather than a sphere with a caption
+   hung off its bottom edge. Absolutely positioning the caption meant its height
+   was invisible to the layout, so on a short window the title printed straight
+   through the version strip. In flow, the glass gives up whatever room the
+   title actually needs, at any length and any window size. */
 .orbstage {
   position: relative;
   z-index: 2;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  min-height: 0;
+  max-height: 100%;
 }
 
 .sphere {
   --mx: 0; --my: 0; --decay: 0; --pulse: 1;
   position: relative;
-  width: min(66vmin, 580px);
+  /* Bigger than the old preview, and measured in vmin so that it is the short
+     edge of the window that decides -- the chrome above it and the caption and
+     history below it need a predictable share of the height, and a sphere sized
+     off the long edge eats theirs on a wide short screen. It never shrinks to
+     fit, because a squashed circle is worse than a smaller one. */
+  flex: none;
+  width: min(64vmin, 620px);
   aspect-ratio: 1;
   border-radius: 50%;
   overflow: hidden;
@@ -573,34 +707,34 @@ body.overlay-on .masthead { opacity: 0; visibility: hidden; pointer-events: none
    through the readout. Flow makes the gap a consequence of the title's real
    height, at any length and any window size. */
 .orb-caption {
-  position: absolute;
-  top: calc(100% + 1rem);
-  left: 50%;
-  transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.5rem;
-  width: max-content;
+  flex: none;
   max-width: min(80vmin, 640px);
+  text-align: center;
 }
+/* The memory names itself here rather than in the chrome. It is the one piece
+   of type that never fades out with the controls: the title is part of the
+   thing, not part of the machinery around it. */
 .orb-title {
   font-family: var(--display);
   font-weight: 400;
-  font-size: clamp(1rem, 2.2vw, 1.35rem);
-  color: var(--ink);
+  font-size: clamp(1.15rem, 2.6vw, 1.6rem);
+  color: var(--void-ink);
   text-align: center;
   line-height: 1.3;
 }
-/* the only readout left in here: what is present, and how far gone it is */
+/* what is present, and how far gone it is */
 .orb-sub {
   max-width: 90vw;
   font-size: 0.76rem;
   letter-spacing: 0.05em;
-  color: var(--faint);
+  color: var(--void-faint);
   text-align: center;
 }
-.flashword { color: color-mix(in srgb, var(--dot-b) 80%, var(--ink)); }
+.flashword { color: color-mix(in srgb, var(--glow) 62%, white); }
 
 /* -------------------------------------------------- the inside of an orb --- */
 
@@ -787,6 +921,327 @@ body.overlay-on .masthead { opacity: 0; visibility: hidden; pointer-events: none
   background: radial-gradient(circle at 50% 50%, transparent 62%, color-mix(in srgb, var(--g1) 16%, transparent) 100%);
   z-index: 4;
 }
+
+/* ------------------------------------------------------------ the past --- */
+
+/* Every opening this memory has had, oldest first, each chip carrying how faded
+   that version already was. It is a record, not a control panel: reading it
+   costs nothing and replaying one appends nothing. */
+.timeline { padding: 0.7rem 1.4rem 1.2rem; }
+.tl-label {
+  font-size: 0.66rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--void-faint);
+  margin-bottom: 0.5rem;
+}
+.tl-strip {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding-bottom: 0.35rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--void-edge) transparent;
+}
+.tl-empty { font-family: var(--marker); font-size: 1rem; color: var(--void-faint); }
+
+.chip {
+  flex: none;
+  min-width: 2.6rem;
+  padding: 0.35rem 0.5rem 0.4rem;
+  border-radius: 9px;
+  border: 1px solid var(--void-edge);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--void-faint);
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+  transition: color 0.18s, border-color 0.18s, background 0.18s;
+}
+.chip:hover { color: var(--void-ink); border-color: color-mix(in srgb, var(--glow) 42%, transparent); }
+.chip.active {
+  color: var(--void-ink);
+  border-color: color-mix(in srgb, var(--glow) 60%, transparent);
+  background: color-mix(in srgb, var(--glow) 12%, transparent);
+}
+.chip.flash { box-shadow: 0 0 14px -4px var(--glow); }
+.chip-n { display: block; }
+.chip-bar {
+  display: block;
+  height: 2px;
+  margin: 0.3rem 0.1rem 0;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+}
+.chip-bar i {
+  display: block;
+  height: 100%;
+  background: color-mix(in srgb, var(--glow) 70%, transparent);
+  border-radius: 2px;
+}
+
+/* ---------------------------------------------------------- the contents --- */
+
+/* What is in this memory and what did not survive into the version you are
+   looking at. A struck-through line is not missing data -- it is the point. */
+.reveal {
+  position: absolute;
+  top: 0;
+  right: 1.4rem;
+  z-index: 3;
+  width: min(300px, 84vw);
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--void-edge);
+  border-radius: 16px;
+  background: var(--void-panel);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  font-size: 0.78rem;
+  scrollbar-width: thin;
+  animation: fadein 0.3s ease both;
+}
+.reveal section { margin-bottom: 1.1rem; }
+.reveal section:last-child { margin-bottom: 0; }
+.reveal h3 {
+  font-size: 0.64rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--void-faint);
+  font-weight: 500;
+  margin-bottom: 0.45rem;
+}
+.reveal h3 em { font-style: normal; color: color-mix(in srgb, var(--glow) 60%, white); }
+.reveal ul { list-style: none; }
+.reveal li { padding: 0.15rem 0; line-height: 1.35; }
+.reveal li.here { color: var(--void-dim); }
+.reveal li.gone {
+  color: var(--void-faint);
+  text-decoration: line-through;
+  text-decoration-color: rgba(120, 115, 160, 0.45);
+}
+
+/* ------------------------------------------------------- the laboratory --- */
+
+/* The bench is deliberately plainer than the memory itself: instruments should
+   not compete with the specimen. Same void, same pills, but the type goes small
+   and regular and every accent is still the memory's own colour. */
+.lab {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(900px 700px at 20% 8%, color-mix(in srgb, var(--glow) 10%, transparent), transparent 66%),
+    var(--void);
+  color: var(--void-ink);
+  animation: fadein 0.4s ease both;
+}
+
+.lab-head {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.9rem 1.2rem;
+  border-bottom: 1px solid var(--void-edge);
+  flex-wrap: wrap;
+}
+.lab-title { flex: 1; min-width: 0; }
+.lab-title h1 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 1.15rem;
+  letter-spacing: 0.01em;
+}
+.lab-title .dim { color: var(--void-faint); }
+.hud-sub { font-size: 0.72rem; letter-spacing: 0.04em; color: var(--void-faint); margin-top: 0.15rem; }
+.lab-acts { display: flex; gap: 0.4rem; flex-wrap: wrap; justify-content: flex-end; }
+
+.lab-body { flex: 1; display: grid; grid-template-columns: minmax(280px, 25vw) 1fr; min-height: 0; }
+
+.lab-panel { border-right: 1px solid var(--void-edge); display: flex; flex-direction: column; min-height: 0; }
+.lab-tabs { display: flex; border-bottom: 1px solid var(--void-edge); }
+.lab-tabs button {
+  flex: 1;
+  padding: 0.7rem 0.4rem;
+  color: var(--void-faint);
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  border-bottom: 1px solid transparent;
+  transition: color 0.18s, border-color 0.18s;
+}
+.lab-tabs button.on { color: var(--void-ink); border-bottom-color: var(--glow); }
+.lab-tabs button:hover { color: var(--void-dim); }
+
+.lab-scroll {
+  overflow-y: auto;
+  padding: 0.4rem 1rem 4rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--void-edge) transparent;
+}
+
+.lab-group { padding: 1rem 0 0.4rem; border-bottom: 1px solid var(--void-edge); }
+.lab-group:last-child { border-bottom: none; }
+.lab-group h3 {
+  font-size: 0.66rem;
+  font-weight: 500;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--glow) 62%, white);
+  margin-bottom: 0.3rem;
+}
+.lab-group h3 em { color: var(--void-faint); font-style: normal; letter-spacing: 0.04em; }
+
+/* hints are the one place the bench talks like the rest of the app does */
+.lab-hint {
+  color: var(--void-faint);
+  font-size: 0.74rem;
+  line-height: 1.5;
+  margin: 0.15rem 0 0.5rem;
+}
+.lab-hint a { color: color-mix(in srgb, var(--glow) 60%, white); border-bottom: 1px solid var(--void-edge); }
+.lab-empty { color: var(--void-faint); font-style: italic; padding: 1.4rem 0; }
+
+.lab-row { display: block; margin: 0.55rem 0 0.15rem; }
+.lab-row .lab-head { display: flex; align-items: baseline; gap: 0.5rem; padding: 0; border: none; }
+.lab-l { flex: 1; font-size: 0.82rem; color: var(--void-dim); }
+.lab-v { color: var(--void-ink); font-size: 0.74rem; font-variant-numeric: tabular-nums; font-weight: 400; }
+.tagnew {
+  font-style: normal;
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--void-faint);
+  border: 1px solid var(--void-edge);
+  border-radius: 3px;
+  padding: 0 0.28rem;
+}
+
+.lab-toggle { display: flex; align-items: center; gap: 0.55rem; cursor: pointer; }
+.lab-toggle input { accent-color: var(--glow); }
+.piece .lab-l { color: var(--void-faint); }
+.piece.present .lab-l { color: var(--void-dim); }
+.piece input:not(:checked) ~ .lab-l { text-decoration: line-through; opacity: 0.5; }
+
+.lab-panel input[type=range] {
+  width: 100%;
+  accent-color: var(--glow);
+  height: 1.1rem;
+  cursor: pointer;
+  background: none;
+}
+.lab-pair { display: grid; gap: 0.1rem; }
+/* The two handles of a range bias sit stacked; the lower rail is dimmed so it
+   reads as one control with a floor and a ceiling rather than two sliders. */
+.lab-pair input:first-child { opacity: 0.55; }
+
+.lab-panel select {
+  width: 100%;
+  background: var(--void-deep);
+  color: var(--void-ink);
+  font: inherit;
+  font-size: 0.78rem;
+  border: 1px solid var(--void-edge);
+  border-radius: 6px;
+  padding: 0.35rem 0.4rem;
+  margin-top: 0.2rem;
+}
+.lab-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.3rem; }
+.chipbox { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.72rem; color: var(--void-dim); cursor: pointer; }
+.chipbox input { accent-color: var(--glow); }
+
+.expand {
+  border: 1px solid var(--void-edge);
+  color: var(--void-dim);
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 5px;
+  line-height: 1;
+  font-size: 0.8rem;
+}
+.expand.on { color: var(--glow); border-color: color-mix(in srgb, var(--glow) 40%, transparent); }
+
+.lab-subs {
+  margin: 0.4rem 0 0.2rem 0.6rem;
+  padding-left: 0.7rem;
+  border-left: 1px solid var(--void-edge);
+}
+.lab-sub { margin-bottom: 0.4rem; }
+/* A sub that has been touched stops listening to its macro, and has to say so. */
+.lab-sub.manual .lab-l { color: color-mix(in srgb, var(--glow) 70%, white); }
+.autobtn {
+  border: 1px solid var(--void-edge);
+  color: var(--void-faint);
+  font: inherit;
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 3px;
+  padding: 0 0.3rem;
+}
+.autobtn:hover { color: var(--void-ink); }
+
+.lab-stage {
+  position: relative;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  place-items: center;
+  min-height: 0;
+  padding: 0.9rem;
+}
+/* smaller than in the memory: on the bench the specimen shares the room with
+   the instruments, and a sphere sized to the full height of the stage crowds
+   the transport off the bottom of it */
+.lab-stage .sphere { width: min(52vmin, 480px); max-width: 100%; }
+.lab-stage .reveal { position: absolute; inset: auto 1rem 5rem 1rem; width: auto; max-height: 40vh; }
+
+.lab-transport {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  padding: 0.7rem 0 0.2rem;
+  width: 100%;
+}
+.tp-range { display: flex; flex-direction: column; gap: 0.15rem; min-width: 190px; }
+.tp-range span { font-size: 0.72rem; color: var(--void-dim); letter-spacing: 0.04em; }
+.tp-range b { color: var(--void-ink); font-weight: 400; font-variant-numeric: tabular-nums; }
+.lab-transport input[type=range] { accent-color: var(--glow); width: 100%; }
+.tp-check { display: flex; align-items: center; gap: 0.4rem; font-size: 0.76rem; color: var(--void-dim); cursor: pointer; }
+.tp-check input { accent-color: var(--glow); }
+
+.take-list { list-style: none; margin: 0.4rem 0 0.8rem; }
+.take-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--void-edge);
+  font-size: 0.78rem;
+}
+.take-k {
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--void-faint);
+  width: 3.1rem;
+  flex: none;
+}
+.take-n { flex: 1; color: var(--void-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.take-z { color: var(--void-faint); font-variant-numeric: tabular-nums; font-size: 0.7rem; }
+
+.hudbtn.tiny { padding: 0.05rem 0.4rem; font-size: 0.7rem; line-height: 1.35; border-radius: 6px; }
+.hudbtn.tiny:disabled { opacity: 0.25; cursor: default; }
+.hudbtn.wide { width: 100%; margin-top: 0.5rem; justify-content: center; }
+
+.dec-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0; }
+.dec-row .lab-l { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dec-manual { margin-top: 0.7rem; padding-top: 0.6rem; border-top: 1px dashed var(--void-edge); }
+.dec-manual a { color: color-mix(in srgb, var(--glow) 60%, white); }
+.dec-manual input[type=file] { font-size: 0.7rem; color: var(--void-faint); margin-top: 0.4rem; width: 100%; }
 
 /* --------------------------------------------------------- contributing --- */
 
@@ -997,6 +1452,33 @@ textarea::placeholder, input::placeholder { color: var(--faint); }
   .addcard { width: calc(100vw - 1.6rem); padding: 1.4rem 1.2rem 1.2rem; max-height: 88vh; }
   .sphere { width: min(78vmin, 480px); }
 
+  /* inside a memory the controls wrap rather than shrink away: on a phone the
+     chrome is already hidden most of the time, so when it is up it should be
+     properly hittable */
+  .hud { padding: 0.8rem 0.9rem; gap: 0.6rem; }
+  .hud-actions { gap: 0.35rem; }
+  .hudbtn { padding: 0.44rem 0.8rem; font-size: 0.8rem; }
+  .hudbtn-solid { font-size: 0.92rem; padding: 0.44rem 0.95rem; }
+  .stagewrap { padding: 0.4rem 0.9rem 0.8rem; }
+  .timeline { padding: 0.5rem 0.9rem 0.9rem; }
+
+  /* the contents stop being a side panel and become a sheet across the foot of
+     the glass -- there is no room beside a sphere at this width */
+  .reveal {
+    top: auto;
+    bottom: 0;
+    right: 0;
+    left: 0;
+    width: auto;
+    max-height: 46%;
+    border-radius: 16px 16px 0 0;
+  }
+  /* The sheet comes up over the foot of the caption, and half a line of type
+     sticking out above its edge reads as a clipping bug. The readout is the
+     one-line summary of exactly what the sheet is now saying in full, so it
+     stands down while the sheet is up. The title stays: it names the thing. */
+  .orbscene.revealing .orb-sub { opacity: 0; transition: opacity 0.25s; }
+
   /* at 390px the two controls crowd the corner, so they shrink and the sound
      control drops to its pip alone */
   .masthead { padding: 0.85rem 0.9rem; gap: 0.5rem; }
@@ -1007,6 +1489,14 @@ textarea::placeholder, input::placeholder { color: var(--faint); }
   .top-actions .btn[data-act=sound] { padding: 0.5rem; }
 }
 
+/* the bench stacks before the memory does: two panes side by side stop working
+   long before one sphere does */
+@media (max-width: 860px) {
+  .lab-body { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
+  .lab-panel { border-right: none; border-top: 1px solid var(--void-edge); order: 2; max-height: 46vh; }
+  .lab-stage { order: 1; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .marble-body, .plate-inner, .grain, .marble-ring,
   .hero-tail, .hero-tongue, .hero-head, .hero-eye { animation: none !important; }
@@ -1014,4 +1504,13 @@ textarea::placeholder, input::placeholder { color: var(--faint); }
   .thought-pip, .thought-bubble { animation-duration: 0.01ms !important; }
   .seq-beat, .seq-word, .seq-layer { transition-duration: 0.01ms !important; }
   .seq-flash .seq-frame { animation: none; }
+
+  /* Chrome that dissolves and reappears is motion, and it is motion the reader
+     did not ask for. If movement is unwelcome the controls simply stay put. */
+  .orbscene.calm .hud,
+  .orbscene.calm .timeline {
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+  }
 }

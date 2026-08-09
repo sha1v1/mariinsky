@@ -5,8 +5,8 @@
   "type": "module",
   "description": "a memory collective — an i-spy wall of memories that come back different, and fade, every time they are looked at",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js",
+    "start": "node --env-file-if-exists=.env server.js",
+    "dev": "node --env-file-if-exists=.env --watch server.js",
     "seed": "node scripts/seed.js"
   },
   "engines": { "node": ">=18" },

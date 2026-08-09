@@ -31,12 +31,19 @@ something to hunt through, and eleven marbles alone on white paper is a
 dashboard, not a spread. Trinkets are inert: no pointer, no focus, no hover, and
 they are never round, so nothing is ever mistaken for a memory.
 
-**Inside a memory** is the opposite: the page frosts over and one sphere rises
-out of the marble you clicked, lit by a gradient built from its own photographs
-(or, if it is only words, from the mood those words were read as). It is always
-dead centre, at every window size. There is no back button and no controls —
-click anywhere outside it. Its own sound comes up over the collection while it
+**Inside a memory** is the opposite: the paper drops away entirely and one
+sphere rises out of the marble you clicked, lit by a gradient built from its own
+photographs (or, if it is only words, from the mood those words were read as).
+It takes the whole screen. Its own sound comes up over the collection while it
 is open.
+
+The controls in there are quiet rather than absent. A back button, the contents
+of the memory, the laboratory, sound, and *open it again* sit at the top; every
+version this memory has ever had sits along the bottom, and clicking one plays
+it back without appending anything. All of it fades out a few seconds after you
+stop moving and returns the moment you move again, so the memory is
+uninterrupted while you are watching it and fully operable the instant you want
+something. Escape still leaves, and so does clicking the margin.
 
 **Leaving a memory** uses the same door: a card over the frosted collection,
 dismissed by clicking outside it. Backing out of writing costs exactly as little
@@ -213,6 +220,9 @@ memory that reported itself gone.
 | `GET /api/orbs/:id` | one memory in full, including every past version |
 | `POST /api/orbs/:id/versions` | begin a version — a collage arrangement, or a sequence seed |
 | `PATCH`/`POST /api/orbs/:id/versions/:n` | the write-back: beats watched, what was seen, strain left behind. POST as well as PATCH because `sendBeacon` is always a POST |
+| `PUT /api/orbs/:id/settings` | the laboratory's recipe: how this memory composes itself from now on |
+| `POST /api/orbs/:id/decompose` | cut a photograph into semantic layers with Qwen-Image-Layered, via fal. Needs `FAL_KEY`; answers 503 with the manual route if it is unset |
+| `POST /api/orbs/:id/layers` | the keyless way to the same place: layer PNGs cut elsewhere, uploaded by hand |
 
 ---
 
@@ -224,8 +234,12 @@ memory that reported itself gone.
   page. They read as a jumble at page scale but not at close range.
 - Contributions are not rate-limited or moderated. A public wall on the open
   internet will need both.
-- The laboratory (the prototype's per-memory tuning bench) was not brought
-  across. Every memory runs the schema defaults, and the plumbing for per-memory
-  recipes is already in place — `settings` on the record, `PUT` route absent.
+- The laboratory writes to a *shared* wall. A recipe is a property of the memory
+  rather than of whoever tuned it, so saving one changes how that memory comes
+  back for everybody — the same bargain as the decay, but nothing marks it as
+  such in the interface, and there is no moderation on it.
+- Semantic decomposition is pay-per-use on somebody else's GPU. `FAL_KEY` lives
+  in `.env` (gitignored; `.env.example` is the committed, empty one), and the
+  bench offers the free manual route when no key is set.
 - `uploads/` ships with one small sample memory. The two video-heavy samples
   from the orb prototype were left out — they were 119 MB.

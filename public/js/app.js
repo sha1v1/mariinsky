@@ -10,6 +10,7 @@ import { OrbAudio } from './orbaudio.js';
 import { Garden } from './garden.js';
 import { Contribute } from './contribute.js';
 import { OrbView } from './orbview.js';
+import { LabView } from './lab.js';
 
 const root = document.getElementById('app');
 const overlay = document.getElementById('overlay');
@@ -120,6 +121,7 @@ function closeOverlay() {
   // contribution card, the overlay owns the screen and a second set of controls
   // would just be noise -- so it is taken away rather than frosted over.
   document.body.classList.remove('overlay-on');
+  document.body.classList.remove('immersive');
   garden?.frost(false);
   orbAudio.stop(0.5);
   scape.duck(1, 1.4);
@@ -128,13 +130,23 @@ function closeOverlay() {
 async function route() {
   const hash = location.hash || '#/';
 
-  if (hash.startsWith('#/orb/')) {
+  // A memory and its laboratory are the same view with different chrome, and
+  // both take the whole screen: the collection is not torn down behind them,
+  // only covered, so stepping between orb and bench and back out again costs
+  // nothing but the fetch.
+  if (hash.startsWith('#/orb/') || hash.startsWith('#/lab/')) {
+    const bench = hash.startsWith('#/lab/');
     await ensureGarden();
     closeOverlay();
     overlay.classList.add('on');
     document.body.classList.add('overlay-on');
     garden.frost(true);
-    orb = new OrbView(overlay, orbAudio, scape, session);
+    // The printed border belongs to the page, and a memory is not on the page
+    // any more -- it is the whole screen. The contribution card, which really
+    // is a card laid over the collection, keeps its frame.
+    document.body.classList.add('immersive');
+    const View = bench ? LabView : OrbView;
+    orb = new View(overlay, orbAudio, scape, session);
     try {
       await orb.open(hash.slice(6));
     } catch {
