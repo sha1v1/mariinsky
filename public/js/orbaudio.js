@@ -203,15 +203,33 @@ export class OrbAudio {
       });
     }
 
+    // A "flat" strand (most of them) passes the source through untouched --
+    // full spectrum, including whatever the recording itself carries at the
+    // extremes: sub-bass handling rumble on the low end, mic hiss and
+    // compression noise on the high end. That is the static: not a scheduling
+    // glitch but the room actually playing back a recording's own noise
+    // floor. Capping both ends before it joins the room keeps the recording
+    // without the parts of it nobody meant to hear.
+    const rumble = ctx.createBiquadFilter();
+    rumble.type = 'highpass';
+    rumble.frequency.value = 55;
+    rumble.Q.value = 0.7;
+    const sheen = ctx.createBiquadFilter();
+    sheen.type = 'lowpass';
+    sheen.frequency.value = 11000;
+    sheen.Q.value = 0.7;
+    out.connect(rumble);
+    rumble.connect(sheen);
+
     // Distance: the far side of a room has no top end, and what does arrive is
     // mostly reflection. Level, air and room all move together off one slider.
-    let tail = out;
+    let tail = sheen;
     if (S) {
       const air = ctx.createBiquadFilter();
       air.type = 'lowpass';
       air.frequency.value = sub(S, 'audio.distance', 'lowpass');
       air.Q.value = 0.7;
-      out.connect(air);
+      sheen.connect(air);
       tail = air;
 
       // Strands are spread across the stereo field rather than each being

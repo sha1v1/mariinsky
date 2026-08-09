@@ -85,6 +85,19 @@ function shell() {
   document.addEventListener('pointerdown', wake, { passive: true });
   document.addEventListener('keydown', wake);
 
+  // Browsers suspend an AudioContext on their own timeline -- a backgrounded
+  // tab, a power-saving mode -- and nothing about being inside an orb ever
+  // calls `ensure()` again once it's already open, so a suspend mid-visit
+  // used to just leave the track silent until the next hover or click
+  // somewhere happened to wake it back up. Resuming the moment the tab is
+  // visible again means coming back to it is enough.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    scape.ensure();
+    orbAudio.ensure();
+  });
+
+
   // The audioscape can also be muted or suspended from outside this button --
   // by a memory ducking it, or by the browser suspending the context on a
   // background tab -- so the label is re-checked rather than only written to.
@@ -123,8 +136,10 @@ function closeOverlay() {
   document.body.classList.remove('overlay-on');
   document.body.classList.remove('immersive');
   garden?.frost(false);
-  orbAudio.stop(0.5);
-  scape.duck(1, 1.4);
+  // Mirrors the entrance: the memory's own sound recedes as the room comes
+  // back up, one crossfade back to the base track rather than a hard stop.
+  orbAudio.stop(1.2);
+  scape.duck(1, 2.0);
 }
 
 async function route() {

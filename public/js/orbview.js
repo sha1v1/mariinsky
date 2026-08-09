@@ -62,14 +62,23 @@ export class OrbView {
 
     // The collection keeps playing underneath, but this memory sits on top of
     // it -- pulled down far enough that its own sound is clearly the loudest
-    // thing in the room, not so far that the room disappears.
-    this.scape?.duck(0.34, 1.2);
+    // thing in the room, not so far that the room disappears. Slow, so the
+    // room visibly recedes rather than jumping to quiet.
+    this.scape?.duck(0.28, 2.4);
 
     this.shell();
 
     // Visiting a memory is what puts it into the shared audioscape. It swells
     // in the collection when you come back out.
-    if (this.orb.analysis) this.session?.queue(this.orb.analysis, this.orb.title);
+    this.entrance = null;
+    if (this.orb.analysis) {
+      this.session?.queue(this.orb.analysis, this.orb.title);
+      // And it announces itself on the way in, too: a fuller pass through its
+      // own chords instead of just letting the hover fade into a ducked room.
+      // Kept so `close` can cut it short instead of it ringing on its own
+      // clock after you've already left.
+      this.entrance = this.scape?.enter(this.orb.analysis, this.orb.title);
+    }
 
     if (this.mode === 'sequence') return this.openStream();
     const version = composeVersion(this.orb, this.settings);
@@ -405,7 +414,9 @@ export class OrbView {
 
     if (token !== this.token) return;
     trimLayerCache();
-    this.audio.play(this.orb, version, this.settings).catch(() => {});
+    // Slow, to match the room ducking under it and the hover dying away --
+    // one continuous crossfade into the memory's own sound, not a jump cut.
+    this.audio.play(this.orb, version, this.settings, { fade: 2.4 }).catch(() => {});
     this.drawTimeline();
     if (this.revealEl && !this.revealEl.hidden) this.drawReveal();
   }
@@ -598,6 +609,10 @@ export class OrbView {
     clearTimeout(this.calmTimer);
     this.stopStream();
     this.stopVideos();
+    // Cut the entrance swell now rather than letting it ring out on its own
+    // clock -- otherwise, once the caller un-ducks the room, a swell still
+    // mid-flight gets louder instead of fading away.
+    this.entrance?.then((h) => h.stop()).catch(() => {});
     document.removeEventListener('keydown', this.onKey);
     this.token++;
   }

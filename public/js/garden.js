@@ -271,7 +271,7 @@ export class Garden {
     el.addEventListener('click', (e) => {
       if (this.moved) return;                 // a drag should not open anything
       e.preventDefault();
-      this.release();
+      this.release(2.2);                       // matches the orb's entrance -- one crossfade, not a cut
       // hand the marble's on-screen position to the orb so it can grow from it
       window.__fromRect = el.getBoundingClientRect();
       location.hash = `#/orb/${memory.id}`;
@@ -304,8 +304,8 @@ export class Garden {
     if (this.hoveredEl === el) { this.hoveredEl = null; this.release(); }
   }
 
-  release() {
-    this.held?.release();
+  release(tail) {
+    this.held?.release(tail);
     this.held = null;
   }
 
