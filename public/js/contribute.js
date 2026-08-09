@@ -430,7 +430,11 @@ export class Contribute {
       this.sealing = false;
       return this.status('the wall would not take it. try again in a second.');
     }
-    const { id } = await res.json().catch(() => ({}));
+    const result = await res.json().catch(() => ({}));
+    const { id } = result;
+    if (result.worldSynced === false) {
+      window.__toast?.('saved here — the 3D world will retry this memory automatically');
+    }
 
     // The contribution joins the audioscape on the way back to the collection, so
     // you hear your own memory arrive in the room the moment you see it land.

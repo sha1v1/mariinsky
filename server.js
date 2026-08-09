@@ -8,6 +8,10 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { marbleColor } from './public/js/marble.js';
+import { splitText } from './public/js/analyze.js';
+import { textComponents } from './public/js/components.js';
+import { defaults as defaultSettings } from './public/js/settings.js';
+import { analyzeMemory } from './public/js/emotion.js';
 
 const run = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -98,17 +102,36 @@ const worldApiFiles = new Map([
   ['media/analyze', 'media/analyze.ts'],
 ]);
 
+async function worldApiHandler(route, method) {
+  const apiFile = worldApiFiles.get(route);
+  if (!apiFile) return null;
+  const file = path.join(WORLD_API, apiFile);
+  const cacheBust = process.env.NODE_ENV === 'development' ? `?t=${Date.now()}` : '';
+  const mod = await import(`${pathToFileURL(file).href}${cacheBust}`);
+  return typeof mod[method] === 'function' ? mod[method] : null;
+}
+
+async function callWorldApi(route, method, payload, query = '') {
+  const handler = await worldApiHandler(route, method);
+  if (!handler) throw new Error(`No ${method} handler for world API route ${route}`);
+  const request = new Request(`http://internal/api/${route}${query}`, {
+    method,
+    headers: payload == null ? undefined : { 'content-type': 'application/json' },
+    body: payload == null ? undefined : JSON.stringify(payload),
+  });
+  const response = await handler(request);
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(data?.error || `World API ${route} returned ${response.status}`);
+  return data;
+}
+
 app.use('/api', async (req, res, next) => {
   const route = req.path.replace(/^\/+|\/+$/g, '');
-  const apiFile = worldApiFiles.get(route);
-  if (!apiFile) return next();
+  if (!worldApiFiles.has(route)) return next();
 
   try {
-    const file = path.join(WORLD_API, apiFile);
-    const cacheBust = process.env.NODE_ENV === 'development' ? `?t=${Date.now()}` : '';
-    const mod = await import(`${pathToFileURL(file).href}${cacheBust}`);
-    const handler = mod[req.method];
-    if (typeof handler !== 'function') {
+    const handler = await worldApiHandler(route, req.method);
+    if (!handler) {
       res.status(405).send(`Method ${req.method} not allowed`);
       return;
     }
@@ -124,9 +147,22 @@ app.use('/api', async (req, res, next) => {
       method, headers, body,
     });
     const response = await handler(request);
+    const responseBody = Buffer.from(await response.arrayBuffer());
+
+    // A contribution made from inside Memory World also becomes a Mariinsky
+    // marble before the client is told it succeeded.
+    if (route === 'submit' && response.ok) {
+      try {
+        const row = JSON.parse(responseBody.toString('utf8'));
+        if (!row.flagged && row.id) await createMariinskyMirror(row);
+      } catch (err) {
+        console.error('[space bridge] could not mirror world contribution into Mariinsky', err);
+      }
+    }
+
     res.status(response.status);
     response.headers.forEach((value, key) => res.setHeader(key, value));
-    res.send(Buffer.from(await response.arrayBuffer()));
+    res.send(responseBody);
   } catch (err) {
     console.error(`[world api] ${req.method} ${req.originalUrl} failed`, err);
     res.status(500).json({ error: 'World API request failed' });
@@ -271,7 +307,195 @@ function summarize(orb) {
     counts,
     fragments: Object.keys(orb.components).length,
     preview: previewOf(orb),
+    worldMemoryId: orb.worldMemoryId || null,
+    mirroredFrom: orb.mirroredFrom || null,
   };
+}
+
+// --------------------------------------------------------- space bridge ---
+
+function textForWorld(orb) {
+  const written = Object.values(orb.sources)
+    .filter((source) => source.kind === 'text' && source.text)
+    .map((source) => source.text.trim())
+    .filter(Boolean)
+    .join('\n');
+  if (written) return written.slice(0, 500);
+
+  const media = Object.values(orb.sources).filter((source) => source.kind !== 'text');
+  const names = media.map((source) => source.name || source.kind).join(', ');
+  const title = orb.title && orb.title !== 'a moment with no words' && orb.title !== 'untitled memory'
+    ? orb.title
+    : 'a visual memory shared in Mariinsky';
+  return `${title}${names ? `, preserved as ${names}` : ''}`.slice(0, 500);
+}
+
+function mimeForSource(source) {
+  if (source.mime) return source.mime.toLowerCase();
+  const ext = path.extname(source.name || source.url || '').toLowerCase();
+  if (source.kind === 'image') return ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
+  if (source.kind === 'video') return ext === '.webm' ? 'video/webm' : ext === '.mov' ? 'video/quicktime' : 'video/mp4';
+  if (source.kind === 'audio') return ext === '.wav' ? 'audio/wav' : ext === '.ogg' ? 'audio/ogg' : 'audio/mpeg';
+  return 'application/octet-stream';
+}
+
+function inputTypeForSource(source) {
+  return source.kind === 'image' ? 'photo' : source.kind === 'audio' ? 'voice' : source.kind;
+}
+
+function localSourceFile(orb, source) {
+  if (!source.url) return null;
+  const prefix = `/files/${orb.id}/`;
+  if (!source.url.startsWith(prefix)) return null;
+  const name = decodeURIComponent(source.url.slice(prefix.length));
+  if (!name || name.includes('/') || name.includes('\\')) return null;
+  return path.join(UPLOADS, orb.id, name);
+}
+
+async function prepareWorldMedia(orb, source) {
+  const file = localSourceFile(orb, source);
+  if (!file) throw new Error('Mariinsky media does not have a local source file');
+  const bytes = await fsp.readFile(file);
+  const fileName = source.name || path.basename(file);
+  const mimeType = mimeForSource(source);
+
+  const upload = await callWorldApi('media/start', 'POST', {
+    fileName, mimeType, size: bytes.length,
+  });
+
+  const storageBody = new FormData();
+  storageBody.append('cacheControl', '3600');
+  storageBody.append('', new Blob([bytes], { type: mimeType }), fileName);
+  const stored = await fetch(upload.storage.signedUrl, {
+    method: 'PUT', headers: { 'x-upsert': 'false' }, body: storageBody,
+  });
+  if (!stored.ok) throw new Error(`Supabase rejected mirrored media (${stored.status})`);
+
+  const analyzed = await callWorldApi('media/analyze', 'POST', {
+    storagePath: upload.storage.path,
+    fileName,
+    mimeType,
+    size: bytes.length,
+  });
+  let geminiFile = analyzed.file;
+  for (let attempt = 0; geminiFile?.state && geminiFile.state !== 'ACTIVE' && attempt < 40; attempt++) {
+    if (geminiFile.state === 'FAILED') throw new Error('Gemini could not process mirrored media');
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    geminiFile = await callWorldApi(
+      'media/status', 'GET', null, `?name=${encodeURIComponent(geminiFile.name)}`,
+    );
+  }
+  if (!geminiFile?.name || !geminiFile.uri || (geminiFile.state && geminiFile.state !== 'ACTIVE')) {
+    throw new Error('Mirrored media did not become ready for interpretation');
+  }
+
+  return {
+    input_type: upload.inputType,
+    raw_text: textForWorld(orb),
+    media: {
+      file_uri: geminiFile.uri,
+      gemini_file_name: geminiFile.name,
+      mime_type: mimeType,
+      original_name: fileName,
+      storage_path: upload.storage.path,
+      size: bytes.length,
+    },
+  };
+}
+
+async function mirrorOrbToWorld(orb) {
+  if (orb.worldMemoryId) return orb.worldMemoryId;
+  const media = Object.values(orb.sources).find((source) => ['image', 'video', 'audio'].includes(source.kind));
+  let payload;
+  let mode = 'text';
+  if (media) {
+    try {
+      payload = await prepareWorldMedia(orb, media);
+      mode = inputTypeForSource(media);
+    } catch (err) {
+      // A symbolic object is still better than an orphaned contribution. Keep
+      // the bridge alive with its title/file context if media transfer fails.
+      console.warn(`[space bridge] media transfer for orb ${orb.id} failed; using its text context`, err);
+    }
+  }
+  payload ||= { input_type: 'text', raw_text: textForWorld(orb) };
+  const row = await callWorldApi('submit', 'POST', payload);
+  if (!row?.id || row.flagged) throw new Error('World did not create a visible artifact');
+  orb.worldMemoryId = row.id;
+  orb.worldSyncMode = mode;
+  await writeOrb(orb);
+  console.log(`[space bridge] Mariinsky ${orb.id} → world ${row.id} (${mode})`);
+  return row.id;
+}
+
+async function createMariinskyMirror(row) {
+  if (!row?.id || row.flagged) return null;
+  const current = await allOrbs();
+  const existing = current.find((orb) => orb.worldMemoryId === row.id);
+  if (existing) return existing.id;
+
+  const id = newId();
+  const text = String(row.raw_text || row.epitaph || row.label || 'a memory from the shared world').slice(0, 40000);
+  const settings = defaultSettings();
+  const fragments = splitText(text, {
+    maxWords: settings.text.maxWords,
+    maxChars: settings.text.maxChars,
+  });
+  const analysis = analyzeMemory(text);
+  const sources = { txt1: { kind: 'text', text, label: 'what was remembered' } };
+  const components = textComponents('txt1', fragments.length ? fragments : [text]);
+
+  if (row.input_url && row.input_type === 'photo') {
+    sources.img1 = { kind: 'image', url: row.input_url, name: 'the original photograph' };
+    components['img1::whole'] = {
+      kind: 'imageLayer', src: 'img1', mode: 'rgba', set: 'semantic',
+      url: row.input_url, name: 'the whole photograph', hint: 'normal', z: 0,
+    };
+  } else if (row.input_url && row.input_type === 'video') {
+    sources.vid1 = { kind: 'video', url: row.input_url, name: 'the original clip', duration: 6, hasAudio: true };
+    components['vid1::v0'] = { kind: 'videoPortion', src: 'vid1', start: 0, end: 6, name: 'the opening of the clip' };
+  } else if (row.input_url && row.input_type === 'voice') {
+    sources.aud1 = { kind: 'audio', url: row.input_url, name: 'the original recording', duration: 6 };
+    components['aud1::a0'] = { kind: 'audioWindow', src: 'aud1', start: 0, end: 6, name: 'the recording' };
+  }
+
+  const palette = current.map((orb) => orb.marble).filter(Boolean);
+  const orb = {
+    id,
+    title: String(row.label || row.epitaph || text.split('\n')[0] || 'a memory from the world').slice(0, 120),
+    createdAt: Date.now(),
+    glow: '#8fa9ff',
+    marble: marbleColor(id, palette),
+    emotion: analysis.emotion,
+    analysis,
+    decay: 0,
+    strain: 0,
+    sources,
+    components,
+    settings,
+    versions: [],
+    worldMemoryId: row.id,
+    mirroredFrom: 'memory-world',
+  };
+  await writeOrb(orb);
+  console.log(`[space bridge] world ${row.id} → Mariinsky ${orb.id}`);
+  return orb.id;
+}
+
+async function reconcileSpaces() {
+  try {
+    const local = await allOrbs();
+    for (const orb of local) {
+      if (!orb.worldMemoryId) await mirrorOrbToWorld(orb);
+    }
+
+    const world = await callWorldApi(
+      'world', 'GET', null, '?x0=-5000&y0=-5000&x1=5000&y1=5000',
+    );
+    for (const row of world?.objects || []) await createMariinskyMirror(row);
+  } catch (err) {
+    console.error('[space bridge] startup reconciliation stopped', err);
+  }
 }
 
 /**
@@ -405,7 +629,21 @@ app.post('/api/orbs', reserveOrb, upload.array('files'), async (req, res) => {
   };
 
   await writeOrb(orb);
-  res.json({ id: orb.id, marble: orb.marble });
+  let worldMemoryId = null;
+  let worldSyncError = null;
+  try {
+    worldMemoryId = await mirrorOrbToWorld(orb);
+  } catch (err) {
+    worldSyncError = err instanceof Error ? err.message : String(err);
+    console.error(`[space bridge] Mariinsky orb ${orb.id} was saved but not mirrored`, err);
+  }
+  res.json({
+    id: orb.id,
+    marble: orb.marble,
+    worldMemoryId,
+    worldSynced: Boolean(worldMemoryId),
+    ...(worldSyncError ? { worldSyncError } : {}),
+  });
 });
 
 app.get('/api/orbs/:id', async (req, res) => {
@@ -703,4 +941,5 @@ app.listen(PORT, () => {
   console.log(`\n  mariinsky  →  http://localhost:${PORT}`);
   console.log(`  memory world →  http://localhost:${PORT}/world/`);
   console.log(`  ffmpeg fallback: ${FFMPEG || 'not installed (undecodable files will be skipped)'}\n`);
+  void reconcileSpaces();
 });

@@ -20,6 +20,12 @@ the root `/api` namespace, and its persisted GLB/sprite paths are served by the
 same process. `npm run dev` provides Vite hot reload through Express; `npm start`
 builds the workspace and starts the complete production app with one command.
 
+Contributions are bridged in both directions. A Mariinsky contribution is sent
+through Memory World's interpretation and placement pipeline; a Memory World
+contribution becomes a Mariinsky marble. On startup, the server also reconciles
+older records that do not yet have a counterpart, linking local orbs through
+their stored `worldMemoryId`.
+
 ---
 
 ## The two worlds
